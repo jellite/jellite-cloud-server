@@ -9,7 +9,7 @@ import type { PlaylistRow, TrackRow } from "./db.js";
  * so that e.g. ArtistItems/AlbumArtists/AlbumId are stable and non-null, matching real
  * Jellyfin's `BaseItemDto` shape more closely for client compatibility.
  */
-function stableId(value: string): string {
+export function stableId(value: string): string {
   return createHash("sha1").update(value).digest("hex");
 }
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { getPlaylist, getPlaylistPrimaryTrack, getTrack } from "../db.js";
+import { getPlaylist, getPlaylistPrimaryTrack, getTrack, getTrackByAlbumOrArtistStableId } from "../db.js";
+import { stableId } from "../jellyfinShapes.js";
 
 export const imagesRouter = Router();
 // No requireAuth here: real Jellyfin serves item images without a token, and clients
@@ -31,6 +32,16 @@ imagesRouter.get("/Items/:id/Images/Primary", (req, res) => {
   if (playlist) {
     const firstTrack = getPlaylistPrimaryTrack(playlist.id);
     sendCover(res, firstTrack?.cover_thumbnail);
+    return;
+  }
+
+  // Clients also request cover art for the synthetic album/artist ids embedded in track
+  // metadata (AlbumId/ArtistItems, see jellyfinShapes.ts stableId()) even though Jellite
+  // has no separate album/artist entities — fall back to any track's embedded cover that
+  // matches that album or artist name.
+  const albumOrArtistTrack = getTrackByAlbumOrArtistStableId(stableId, req.params.id);
+  if (albumOrArtistTrack) {
+    sendCover(res, albumOrArtistTrack.cover_thumbnail);
     return;
   }
 

@@ -62,3 +62,22 @@ export function getPlaylistPrimaryTrack(playlistId: string): TrackRow | undefine
 export function getTrack(id: string): TrackRow | undefined {
   return db.prepare("SELECT * FROM tracks WHERE id = ?").get(id) as TrackRow | undefined;
 }
+
+/**
+ * Jellite exposes stable, deterministic ids for album/artist "entities" (see
+ * jellyfinShapes.ts stableId()) even though they have no real row of their own — clients
+ * then request cover art via /Items/{albumOrArtistId}/Images/Primary for those ids. Since
+ * we don't persist a separate album/artist table, resolve this by scanning tracks for a
+ * matching album/artist name (hashed the same way) and reusing its embedded cover.
+ */
+export function getTrackByAlbumOrArtistStableId(
+  stableId: (value: string) => string,
+  id: string
+): TrackRow | undefined {
+  const tracks = db.prepare("SELECT * FROM tracks WHERE cover_thumbnail IS NOT NULL").all() as TrackRow[];
+  for (const track of tracks) {
+    if (track.album && stableId(track.album) === id) return track;
+    if (track.artist && stableId(track.artist) === id) return track;
+  }
+  return undefined;
+}

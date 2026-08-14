@@ -49,6 +49,22 @@ itemsRouter.get("/Genres", (_req, res) => {
 });
 
 /**
+ * Homepage widgets some clients (jellyfin-vue, Feishin) request unconditionally on
+ * login, regardless of library type. Jellite has no watch/listen history or TV content
+ * (see SPEC.md), so these are always empty — matches what real Jellyfin returns for a
+ * fresh library/user anyway, just without the 404 in between.
+ */
+itemsRouter.get("/Items/Latest", (_req, res) => {
+  res.json([]);
+});
+itemsRouter.get("/Shows/NextUp", (_req, res) => {
+  res.json({ Items: [], TotalRecordCount: 0, StartIndex: 0 });
+});
+itemsRouter.get("/UserItems/Resume", (_req, res) => {
+  res.json({ Items: [], TotalRecordCount: 0, StartIndex: 0 });
+});
+
+/**
  * Fetches a single item by id — Finamp uses this for both playlists and tracks
  * (`/Users/{userId}/Items/{itemId}`).
  */
