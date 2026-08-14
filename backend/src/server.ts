@@ -8,6 +8,7 @@ import { playlistsRouter } from "./routes/playlists.js";
 import { imagesRouter } from "./routes/images.js";
 import { audioRouter } from "./routes/audio.js";
 import { playbackInfoRouter } from "./routes/playbackInfo.js";
+import { sessionsRouter } from "./routes/sessions.js";
 
 const app = express();
 app.use(express.json());
@@ -46,6 +47,7 @@ app.use(itemsRouter);
 app.use(playlistsRouter);
 app.use(audioRouter);
 app.use(playbackInfoRouter);
+app.use(sessionsRouter);
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
