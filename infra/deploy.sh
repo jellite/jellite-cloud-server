@@ -55,11 +55,15 @@ if [ -n "$RUNTIME_SERVICE_ACCOUNT" ]; then
   SA_FLAG=(--service-account "$RUNTIME_SERVICE_ACCOUNT")
 fi
 
+# 512Mi (Cloud Run's default) is too small once data/jellite.sqlite (~225MB) is loaded by
+# better-sqlite3 — observed OOM kills ("container instance was found to be using too much
+# memory and was terminated") under real client load (Finamp), surfacing as 503s.
 gcloud run deploy "$SERVICE_NAME" \
   --project "$GCP_PROJECT" \
   --region "$GCP_REGION" \
   --source "$ROOT_DIR" \
   --allow-unauthenticated \
+  --memory 1Gi \
   --min-instances 0 \
   --max-instances 3 \
   --set-env-vars "JELLITE_SERVER_NAME=Jellite,JELLITE_USERNAME=${JELLITE_USERNAME},JELLITE_PASSWORD=${JELLITE_PASSWORD},JELLITE_ACCESS_TOKEN=${JELLITE_ACCESS_TOKEN}" \

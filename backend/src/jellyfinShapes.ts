@@ -6,6 +6,25 @@ import type { PlaylistRow, TrackRow } from "./db.js";
  * Finamp-like clients rely on for browsing are populated; anything else is intentionally
  * left out per SPEC.md (read-only, no library management via the API).
  */
+/**
+ * Jellyfin's `/Users/{id}/Views` endpoint returns top-level libraries (e.g. "Movies",
+ * "Music"), not individual playlists. Clients like Finamp filter this list client-side
+ * and refuse to let the user pick a library unless one has `CollectionType: "music"`
+ * (see finamp's view_selector.dart) — so Jellite fakes a single "Music" library here.
+ * Playlists themselves are then fetched via `/Items` with this as the parentId.
+ */
+export const MUSIC_LIBRARY_ID = "music-library";
+
+export function musicLibraryItem() {
+  return {
+    Id: MUSIC_LIBRARY_ID,
+    Name: "Music",
+    Type: "CollectionFolder",
+    CollectionType: "music",
+    IsFolder: true,
+  };
+}
+
 export function playlistToItem(playlist: PlaylistRow, trackCount: number) {
   return {
     Id: playlist.id,
