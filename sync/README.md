@@ -66,6 +66,15 @@ real Drive file id, and `--oauth-token-file` isn't required).
 5. Logs (without deleting) any tracks present in the DB but no longer referenced by any
    playlist.
 
+## Progress output
+
+The sync prints a running `[i/total] NN% ...` progress indicator while it processes
+tracks — uploads and warnings (missing files) always print immediately, while routine
+"up to date" ticks are throttled (in a TTY the line is redrawn in place; when output is
+piped to a log file, e.g. a cron job on Unraid, only every 25th tick plus the final one is
+printed, to avoid flooding the log for large libraries). A final summary line reports the
+total counts and elapsed time.
+
 ## Typical end-to-end flow
 
 Use `infra/sync-and-deploy.sh` instead of calling this directly, to also redeploy the
