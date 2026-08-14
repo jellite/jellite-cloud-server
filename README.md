@@ -58,3 +58,6 @@ npm run macos-sync    # biblioteka na tym Macu: /Volumes/music/LOSSLESS
 npm run unraid-sync   # biblioteka na serwerze Unraid: /mnt/user/music/LOSSLESS
 ```
 
+```bash
+cd /Users/zenedith/git/jellite && export GCP_PROJECT=jellite && export RUNTIME_SERVICE_ACCOUNT=jellite-service-account@jellite.iam.gserviceaccount.com && export JELLITE_USERNAME=admin && export JELLITE_PASSWORD='REDACTED-ROTATED-PASSWORD' && export JELLITE_ACCESS_TOKEN='REDACTED-ROTATED-TOKEN' && bash infra/deploy.sh 2>&1
+```
