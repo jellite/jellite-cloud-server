@@ -72,6 +72,14 @@ export function trackToItem(track: TrackRow, playlistId?: string, index?: number
         RequiresLooping: false,
         SupportsProbing: true,
         MediaStreams: [],
+        // These four are also required non-nullable bools in Finamp's generated
+        // MediaSourceInfo.fromJson (cast as `bool`, not `bool?`) — omitting them was
+        // the actual remaining cause of the "type Null is not a subtype of type bool"
+        // crash when opening a playlist, even after fixing the fields above.
+        ReadAtNativeFramerate: false,
+        IgnoreDts: false,
+        IgnoreIndex: false,
+        GenPtsInput: false,
         Path: track.relative_path,
       },
     ],
