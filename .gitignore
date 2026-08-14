@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+
+# Local runtime data — never commit music library DB or secrets
+*.sqlite
+*.sqlite3
+.env
+.env.*
+
+# Google service account keys / credentials
+*.key.json
+service-account*.json
+credentials*.json
+
+.DS_Store
