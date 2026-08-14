@@ -47,6 +47,11 @@ export function playlistToItem(playlist: PlaylistRow, trackCount: number) {
     IsFolder: true,
     ChildCount: trackCount,
     ImageTags: { Primary: playlist.id },
+    // Playlist cover is served as the first track's thumbnail (see images.ts), which is
+    // always 300x300 (verified earlier), so this is accurate, not just a hardcoded guess.
+    // Missing this field is what causes the white bar Finamp renders above the playlist
+    // item list (same root cause as the earlier vertical-title bug for tracks).
+    PrimaryImageAspectRatio: 1,
   };
 }
 
