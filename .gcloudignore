@@ -1,0 +1,27 @@
+.git
+.gitignore
+node_modules/
+backend/node_modules/
+sync/node_modules/
+backend/dist/
+sync/dist/
+*.log
+
+.env
+.env.local
+.env.*.local
+
+# Secrets — never upload to Cloud Build even though the whole repo is used as source.
+*.key.json
+service-account*.json
+credentials*.json
+jellite-*.json
+*oauth-token*.json
+client_secret*.json
+
+# SQLite WAL/SHM sidecar files — only the main jellite.sqlite file is needed by the image.
+data/*.sqlite-shm
+data/*.sqlite-wal
+
+.idea/
+.DS_Store
