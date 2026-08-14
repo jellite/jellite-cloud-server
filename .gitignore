@@ -2,9 +2,6 @@ node_modules/
 dist/
 *.log
 
-# Local runtime data — never commit music library DB or secrets
-*.sqlite
-*.sqlite3
 .env
 .env.local
 .env.*.local
