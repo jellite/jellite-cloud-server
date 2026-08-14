@@ -31,4 +31,13 @@ export const config = {
   // Google Auth Library falls back to Application Default Credentials (e.g. the Cloud Run
   // runtime service account), which is the recommended setup in production.
   googleApplicationCredentials: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+
+  // Comma-separated list of allowed origins for CORS (web clients, e.g. Jellyfin Web /
+  // Finamp web builds running in a browser). Use "*" (the default) to allow any origin —
+  // fine for a single-user server with a static token, but set an explicit allow-list in
+  // production if you want to restrict which sites can call this API from a browser.
+  corsAllowedOrigins: (process.env.JELLITE_CORS_ORIGINS ?? "*")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0),
 };

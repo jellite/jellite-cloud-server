@@ -1,3 +1,4 @@
+import cors from "cors";
 import express from "express";
 import { config } from "./config.js";
 import { authRouter } from "./routes/auth.js";
@@ -11,6 +12,30 @@ import { playbackInfoRouter } from "./routes/playbackInfo.js";
 import { sessionsRouter } from "./routes/sessions.js";
 
 const app = express();
+
+// Allow browser-based clients (Jellyfin Web, Finamp web, custom dashboards, ...) to call
+// this API cross-origin. Jellyfin clients authenticate via custom headers rather than
+// cookies, so credentials aren't required, but we still need to whitelist those headers
+// and expose response headers some web clients read (e.g. streaming range info).
+const corsOptions: cors.CorsOptions = {
+  origin: config.corsAllowedOrigins.includes("*") ? true : config.corsAllowedOrigins,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Emby-Authorization",
+    "X-Emby-Token",
+    "X-MediaBrowser-Token",
+    "X-Emby-Client",
+    "X-Emby-Device-Name",
+    "X-Emby-Device-Id",
+    "X-Emby-Client-Version",
+    "Range",
+  ],
+  exposedHeaders: ["Content-Range", "Content-Length", "Accept-Ranges"],
+  maxAge: 86400,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // TEMPORARY debug logging (added to diagnose a Finamp "add server" failure — remove once
