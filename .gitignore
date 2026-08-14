@@ -17,3 +17,9 @@ client_secret*.json
 client_secret*.json
 .DS_Store
 .idea/
+
+# SQLite WAL/SHM sidecar files are regenerated automatically whenever the DB is opened
+# (backend/sync both use journal_mode=WAL) — they hold no data that isn't already in
+# data/jellite.sqlite once checkpointed, so they must never be committed.
+data/jellite.sqlite-wal
+data/jellite.sqlite-shm
