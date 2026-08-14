@@ -1,5 +1,18 @@
+import { createHash } from "node:crypto";
 import { config } from "./config.js";
 import type { PlaylistRow, TrackRow } from "./db.js";
+
+/**
+ * Deterministic id for entities we don't have a real primary key for (artist/album
+ * names are plain strings in the DB — see TrackRow — Jellite has no separate
+ * artist/album tables since it doesn't support browsing by them, see SPEC.md). Used only
+ * so that e.g. ArtistItems/AlbumArtists/AlbumId are stable and non-null, matching real
+ * Jellyfin's `BaseItemDto` shape more closely for client compatibility.
+ */
+function stableId(value: string): string {
+  return createHash("sha1").update(value).digest("hex");
+}
+
 
 /**
  * Minimal Jellyfin `BaseItemDto`-shaped object for a playlist. Only the fields that
@@ -38,19 +51,46 @@ export function playlistToItem(playlist: PlaylistRow, trackCount: number) {
 }
 
 export function trackToItem(track: TrackRow, playlistId?: string, index?: number) {
+  const runTimeTicks = track.duration_ms != null ? Math.round(track.duration_ms * 10000) : undefined;
+  const artists = track.artist ? [track.artist] : [];
+
   return {
     Id: track.id,
+    ServerId: config.serverId,
     Name: track.title ?? track.relative_path,
     Type: "Audio",
     MediaType: "Audio",
     IsFolder: false,
+    Container: track.container ?? undefined,
     Album: track.album ?? undefined,
-    Artists: track.artist ? [track.artist] : [],
+    AlbumId: track.album ? stableId(track.album) : undefined,
+    AlbumPrimaryImageTag: track.album && track.cover_thumbnail ? track.id : undefined,
+    Artists: artists,
+    ArtistItems: artists.map((name) => ({ Name: name, Id: stableId(name) })),
     AlbumArtist: track.artist ?? undefined,
-    RunTimeTicks: track.duration_ms != null ? Math.round(track.duration_ms * 10000) : undefined,
+    AlbumArtists: artists.map((name) => ({ Name: name, Id: stableId(name) })),
+    RunTimeTicks: runTimeTicks,
     IndexNumber: index,
+    ParentIndexNumber: 1,
     PlaylistItemId: playlistId ? `${playlistId}:${track.id}` : undefined,
     ImageTags: track.cover_thumbnail ? { Primary: track.id } : undefined,
+    // All embedded cover thumbnails are extracted/normalized to 300x300 during sync (see
+    // SPEC.md), so this is always accurate — real Jellyfin sends this too and some
+    // clients use it to pre-size image widgets before the image itself has loaded.
+    PrimaryImageAspectRatio: track.cover_thumbnail ? 1 : undefined,
+    BackdropImageTags: [],
+    LocationType: "FileSystem",
+    // Present with sane "never played" defaults — Jellite doesn't track play state (see
+    // SPEC.md), but the field itself is nullable in Finamp's BaseItemDto so this is only
+    // for closer fidelity with real Jellyfin responses, not because it's required.
+    UserData: {
+      PlaybackPositionTicks: 0,
+      PlayCount: 0,
+      IsFavorite: false,
+      Played: false,
+      Key: track.id,
+      ItemId: track.id,
+    },
     MediaSources: [
       {
         Id: track.id,
@@ -58,7 +98,7 @@ export function trackToItem(track: TrackRow, playlistId?: string, index?: number
         Protocol: "File",
         Type: "Default",
         Name: track.title ?? track.relative_path,
-        RunTimeTicks: track.duration_ms != null ? Math.round(track.duration_ms * 10000) : undefined,
+        RunTimeTicks: runTimeTicks,
         Size: track.file_size ?? undefined,
         // Required non-nullable fields on Jellyfin's MediaSourceInfo — see note in
         // userDto() above about strict client-side deserialization (e.g. Finamp).
