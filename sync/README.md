@@ -1,7 +1,27 @@
 # @jellite/sync
 
 Local-only script that syncs the music library into `data/jellite.sqlite`, uploading only
-new/changed files to a Google Shared Drive (see [`docs/SPEC.md`](../docs/SPEC.md) section 5).
+new/changed files to Google Drive (see [`docs/SPEC.md`](../docs/SPEC.md) section 5).
+
+> **Note on auth**: uploads run via OAuth2 as your own Google account (see "One-time OAuth
+> authorization" below), not the service account. Service accounts always have 0 GB of
+> their own Drive storage quota, so uploads into a regular "My Drive" folder fail with
+> `storageQuotaExceeded` — confirmed empirically while setting this project up (see
+> `../infra/setup-gcp.md` section 3). The service account is still used by the backend for
+> read-only streaming, which works fine since the folder is shared with it.
+
+## One-time OAuth authorization (required before the first real sync)
+
+```bash
+npm run authorize --workspace sync -- \
+  --client-id <OAUTH_CLIENT_ID> \
+  --client-secret <OAUTH_CLIENT_SECRET> \
+  --token-file ./.oauth-token.json
+```
+
+Opens a URL to sign in with the Google account that owns the Drive folder; saves a refresh
+token to `--token-file` (gitignored) for reuse by every subsequent sync. See
+`../infra/setup-gcp.md` section 3a for how to create the OAuth client.
 
 ## Usage
 
@@ -13,13 +33,13 @@ npm run sync -- \
   --master-list /path/to/file1.sorted \
   --playlists-dir /path/to/src/domain/playlist \
   --db /path/to/jellite/data/jellite.sqlite \
-  --drive-folder-id <shared-drive-or-folder-id> \
-  --key-file /path/to/jellite-bf32aae81e7e.json
+  --drive-folder-id <drive-folder-id> \
+  --oauth-token-file ./.oauth-token.json
 ```
 
 Add `--dry-run` to skip Google Drive uploads entirely (useful for testing the
 metadata/playlist logic without real credentials — a placeholder id is stored instead of a
-real Drive file id).
+real Drive file id, and `--oauth-token-file` isn't required).
 
 ## What it does
 
@@ -28,7 +48,7 @@ real Drive file id).
    size) to find new or changed files.
 2. For each new/changed file: extracts tags (title/artist/album/duration) and a resized
    (300x300 JPEG) cover thumbnail from embedded FLAC/M4A tags, uploads the raw audio file to
-   the configured Shared Drive folder, and upserts a `tracks` row.
+   the configured Drive folder, and upserts a `tracks` row.
 3. Reads every `.m3u` file in `--playlists-dir` and rebuilds the `playlists` /
    `playlist_tracks` tables (playlist name = file name, order = file order).
 4. Logs (without deleting) any tracks present in the DB but no longer in the master list.

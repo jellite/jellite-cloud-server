@@ -9,7 +9,7 @@ import {
   upsertTrack,
   upsertUser,
 } from "./db.js";
-import { createDriveClient, uploadAudioFile } from "./drive.js";
+import { createOAuthDriveClient, uploadAudioFile } from "./drive.js";
 import { trackId, playlistId } from "./ids.js";
 import { extractMetadata } from "./metadata.js";
 import { parseMasterList } from "./parseMasterList.js";
@@ -21,7 +21,12 @@ export interface SyncOptions {
   playlistsDir: string;
   dbPath: string;
   driveFolderId: string;
-  keyFilePath?: string;
+  /**
+   * Path to the OAuth token file produced by the one-time `authorize` flow (see
+   * sync/src/authorize.ts and sync/README.md). Uploads run as the actual Google account
+   * that owns the Drive folder, since service accounts have no storage quota of their own.
+   */
+  oauthTokenFilePath?: string;
   username: string;
   userId: string;
   /** Skips Drive uploads (useful for local testing without real GCP credentials). */
@@ -40,8 +45,14 @@ export interface SyncResult {
  * no longer referenced by the master list. See docs/SPEC.md section 5.
  */
 export async function runSync(options: SyncOptions): Promise<SyncResult> {
+  if (!options.dryRun && !options.oauthTokenFilePath) {
+    throw new Error(
+      "Missing --oauth-token-file (required unless --dry-run). Run the one-time authorization first: see sync/README.md."
+    );
+  }
+
   const db = openSyncDb(options.dbPath);
-  const drive = options.dryRun ? undefined : createDriveClient(options.keyFilePath);
+  const drive = options.dryRun ? undefined : await createOAuthDriveClient(options.oauthTokenFilePath!);
 
   upsertUser(db, options.username, options.userId);
 

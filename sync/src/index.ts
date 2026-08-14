@@ -22,7 +22,7 @@ function requireArg(args: Record<string, string | boolean>, name: string): strin
   const value = args[name];
   if (typeof value !== "string") {
     throw new Error(
-      `Missing required argument --${name}. Usage: --library-root <path> --master-list <path> --playlists-dir <path> --db <path> --drive-folder-id <id> [--key-file <path>] [--username <name>] [--user-id <id>] [--dry-run]`
+      `Missing required argument --${name}. Usage: --library-root <path> --master-list <path> --playlists-dir <path> --db <path> --drive-folder-id <id> [--oauth-token-file <path>] [--username <name>] [--user-id <id>] [--dry-run]`
     );
   }
   return value;
@@ -37,13 +37,16 @@ async function main() {
     playlistsDir: resolve(requireArg(args, "playlists-dir")),
     dbPath: resolve(requireArg(args, "db")),
     driveFolderId: args["dry-run"] ? String(args["drive-folder-id"] ?? "DRY_RUN") : requireArg(args, "drive-folder-id"),
-    keyFilePath: typeof args["key-file"] === "string" ? resolve(args["key-file"]) : undefined,
+    oauthTokenFilePath: typeof args["oauth-token-file"] === "string" ? resolve(args["oauth-token-file"]) : undefined,
     username: typeof args["username"] === "string" ? args["username"] : "admin",
     userId: typeof args["user-id"] === "string" ? args["user-id"] : "jellite-user",
     dryRun: Boolean(args["dry-run"]),
   };
 
-  console.log("Starting jellite sync with options:", { ...options, keyFilePath: options.keyFilePath ? "(set)" : undefined });
+  console.log("Starting jellite sync with options:", {
+    ...options,
+    oauthTokenFilePath: options.oauthTokenFilePath ? "(set)" : undefined,
+  });
   const result = await runSync(options);
   console.log("Sync complete:", result);
 }

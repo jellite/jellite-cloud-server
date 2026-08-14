@@ -44,7 +44,7 @@ chmurze otwiera ją w trybie **tylko do odczytu**.
 CREATE TABLE tracks (
   id              TEXT PRIMARY KEY,       -- stabilny identyfikator (np. hash ze ścieżki względnej)
   relative_path   TEXT NOT NULL UNIQUE,   -- ścieżka względna w bibliotece lokalnej
-  drive_file_id   TEXT NOT NULL,          -- ID pliku na Google Shared Drive
+  drive_file_id   TEXT NOT NULL,          -- ID pliku na Google Drive
   title           TEXT,
   artist          TEXT,
   album           TEXT,
@@ -134,7 +134,7 @@ Kroki:
 2. **Dla każdego nowego/zmienionego pliku**:
    - odczyt tagów (artist/title/album/duration) i osadzonej okładki,
    - wygenerowanie miniatury okładki (zmniejszenie do rozsądnego rozmiaru, JPEG),
-   - upload surowego pliku audio na Google Shared Drive (jeśli jeszcze nie wgrany),
+   - upload surowego pliku audio na Google Drive (przez OAuth2, patrz sekcja 6) (jeśli jeszcze nie wgrany),
    - zapis/aktualizacja rekordu w `tracks` (w tym `drive_file_id`).
 3. **Przebudowa playlist** — dla każdego pliku `.m3u`: upsert rekordu w `playlists`,
    usunięcie starych wpisów w `playlist_tracks` dla tej playlisty i wstawienie na
@@ -152,11 +152,16 @@ pomijany, jeśli baza się nie zmieniła).
 
 ## 6. Infrastruktura / wdrożenie
 
-- **Przechowywanie audio**: Google Shared Drive (w ramach Google Workspace).
-  Service account jest dodane jako członek Shared Drive (rola Content
-  Manager/Manager) — dzięki temu ma własny limit miejsca dostarczany przez Workspace
-  (w przeciwieństwie do zwykłego konta service account, które ma 0 GB własnego
-  miejsca na "My Drive").
+- **Przechowywanie audio**: Google Drive. Pierwotnie zakładano Współdzielony dysk
+  (Shared Drive) w ramach Google Workspace, ale weryfikacja z realnymi danymi
+  wykazała, że konto użytkownika **nie jest** kontem Workspace — jest to zwykły
+  folder na "Moim dysku" udostępniony service accountowi. Service account ma
+  zawsze 0 GB własnego miejsca (potwierdzone empirycznie: próba uploadu zwróciła
+  `storageQuotaExceeded`), więc **upload realizowany jest przez OAuth2 jako
+  właściciel folderu** (jednorazowa autoryzacja, patrz `infra/setup-gcp.md`
+  sekcja 3a i `sync/README.md`), a nie przez service account. Odczyt/streamowanie
+  w backendzie nadal korzysta z service accounta, ponieważ folder jest z nim
+  udostępniony do odczytu — to działa bez OAuth.
 - **Backend**: Node.js + TypeScript + Express, kontener wdrażany na **Google Cloud
   Run**. Skaluje się do zera przy braku ruchu → brak kosztu w spoczynku.
 - **Baza danych**: SQLite, **wbudowana w obraz kontenera** podczas deployu (nie ma
@@ -169,15 +174,15 @@ pomijany, jeśli baza się nie zmieniła).
 - **Uwierzytelnienie backendu wobec Google Drive**: Cloud Run może mieć przypisaną
   service account jako tożsamość uruchomieniową (runtime identity) — backend
   korzysta wtedy z Application Default Credentials, **bez potrzeby przechowywania
-  pliku klucza JSON w obrazie/secretach**.
-- **Uwierzytelnienie skryptu sync (lokalnie)**: skrypt sync, uruchamiany na
-  komputerze lokalnym, potrzebuje pliku klucza JSON tej samej (lub osobnej) service
-  account do wywołań Drive API (upload plików). Deploy z lokalnej maszyny wymaga
-  standardowego `gcloud auth login` użytkownika (z uprawnieniami do Cloud Run/Cloud
-  Build w danym projekcie GCP).
-- **Sekrety**: hasło/token statycznego użytkownika oraz dane service account
-  przechowywane jako zmienne środowiskowe Cloud Run / Google Secret Manager — nigdy
-  w repozytorium git.
+  pliku klucza JSON w obrazie/secretach**. Wystarcza to do odczytu/streamowania.
+- **Uwierzytelnienie skryptu sync (lokalnie)**: do **uploadu** nowych plików skrypt
+  sync używa OAuth2 (konto właściciela folderu, jednorazowa autoryzacja z zapisanym
+  lokalnie refresh tokenem — patrz `sync/README.md`), a nie klucza service accounta.
+  Deploy z lokalnej maszyny wymaga standardowego `gcloud auth login` użytkownika
+  (z uprawnieniami do Cloud Run/Cloud Build w danym projekcie GCP).
+- **Sekrety**: hasło/token statycznego użytkownika, klucz service accounta oraz
+  token OAuth2 przechowywane lokalnie/jako zmienne środowiskowe Cloud Run lub Google
+  Secret Manager — nigdy w repozytorium git.
 
 ## 7. Wymagania niefunkcjonalne
 
@@ -212,5 +217,5 @@ pomijany, jeśli baza się nie zmieniła).
 2. Implementacja skryptu synchronizacyjnego (parsowanie `.sorted`/`.m3u`, ekstrakcja
    tagów/okładek, upload Drive, przebudowa SQLite).
 3. Implementacja skryptów infrastruktury (Dockerfile, `gcloud run deploy`, konfiguracja
-   Shared Drive + service account).
+   Google Drive (OAuth2 do uploadu + service account do odczytu)).
 4. Testy end-to-end z rzeczywistym klientem Finamp.

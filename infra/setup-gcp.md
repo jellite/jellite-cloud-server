@@ -24,45 +24,51 @@ pełni dwie role:
 Upewnij się, że plik klucza **nigdy** nie trafia do repozytorium (już objęty `.gitignore`
 przez wzorzec `jellite-*.json`).
 
-## 3. Google Shared Drive z muzyką
+## 3. Google Drive z muzyką — status potwierdzony
 
-Service account **nie ma własnego miejsca na Google Drive** (0 GB na "Mój dysk"), a
-**diagnostyka (patrz niżej) potwierdziła, że SA na razie nic nie widzi** — folder trzeba
-jeszcze udostępnić. Sposób zależy od typu konta Google, na którym jest folder "jellite":
+Uruchomiony `node infra/check-drive-access.mjs` potwierdził:
 
-### Wariant A — masz Google Workspace (konto firmowe/organizacyjne)
+- **Folder "jellite" istnieje i jest udostępniony service accountowi**
+  (id: `1VO32-V4DGRr2WzG-boZAqo3Wmo9nHh1i`).
+- To **zwykły folder** na "Moim dysku", **nie** Współdzielony dysk (SA nie jest członkiem
+  żadnego Shared Drive) — a więc konto nie ma (jeszcze) Google Workspace.
+- **Odczyt działa** (SA widzi zawartość folderu — potrzebne do streamowania w backendzie).
+- **Upload nie działa**: próbny upload zwrócił `storageQuotaExceeded` — "Service Accounts
+  do not have storage quota. Leverage shared drives ... or use OAuth delegation instead."
+  Service account ma zawsze 0 GB własnego miejsca, niezależnie od nadanych uprawnień.
 
-1. W Google Drive utwórz nowy **Współdzielony dysk** (Shared Drive), np. "Jellite Music"
-   (menu "Współdzielone dyski" w lewym pasku — jeśli go nie widzisz, konto nie jest
-   Workspace, użyj Wariantu B).
-2. Dodaj `jellite-service-account@jellite.iam.gserviceaccount.com` jako członka z rolą
-   **Menedżer treści** (Content Manager) lub wyższą.
-3. Przenieś/wgraj tam pliki muzyczne (albo pozwól, by robił to skrypt sync).
-4. ID dysku znajdziesz w URL po `/drive/folders/` — to jest `--drive-folder-id`.
-5. Zweryfikuj: `node infra/check-drive-access.mjs` powinno pokazać dysk na liście
-   "Shared Drives the service account is a member of".
+**Rozwiązanie zaimplementowane w tym repo**: skrypt sync wykonuje upload przez **OAuth2
+jako Twoje własne konto Google** (patrz sekcja 3a), a nie przez service account. Backend w
+Cloud Run nadal używa service accounta wyłącznie do odczytu/streamowania — to działa już
+teraz, bez zmian.
 
-### Wariant B — zwykłe konto Gmail (bez Workspace)
+Alternatywa na przyszłość: aktywacja Google Workspace i przeniesienie muzyki na prawdziwy
+Współdzielony dysk (SA jako Content Manager) eliminuje potrzebę OAuth i pozwala SA też
+wgrywać pliki — nieobowiązkowe, obecne rozwiązanie działa bez tego.
 
-Zwykłe konto Gmail nie ma Współdzielonych dysków. Opcje:
+## 3a. Jednorazowa autoryzacja OAuth2 (do uploadu)
 
-- **B1 (prostsza, ale z ograniczeniem)**: udostępnij istniejący folder "jellite" ze
-  swojego "Mojego dysku" bezpośrednio kontu
-  `jellite-service-account@jellite.iam.gserviceaccount.com` (jak zwykłemu
-  współpracownikowi — prawo "Edytor"). SA będzie mógł wtedy **czytać/streamować** pliki
-  z tego folderu (to wystarcza dla backendu). **Uwaga**: nowe pliki wgrywane przez SA do
-  tego folderu stają się własnością SA i zużywają jego zerowy limit miejsca — **upload
-  przez skrypt sync się nie powiedzie**. W tym wariancie pliki audio trzeba wgrywać do
-  folderu ręcznie (Twoim kontem), a skrypt sync uruchamiać z `--dry-run` pomijając upload,
-  albo ręcznie uzupełniać `drive_file_id` w bazie.
-- **B2 (zalecana, jeśli zależy na automatycznym uploadzie)**: kup/aktywuj Google
-  Workspace (nawet najtańszy plan) dla domeny/konta, żeby mieć dostęp do prawdziwych
-  Współdzielonych dysków (Wariant A) — to jedyny sposób, by SA miał własny limit miejsca
-  do zapisu.
+1. W [GCP Console](https://console.cloud.google.com/apis/credentials?project=jellite) →
+   **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+   - Typ aplikacji: **Desktop app**.
+   - Jeśli to pierwszy OAuth client w projekcie, skonfiguruj najpierw "OAuth consent
+     screen" (typ "External", status "Testing" wystarczy — dodaj swój adres e-mail jako
+     "Test user").
+2. Pobierz/skopiuj wygenerowany **Client ID** i **Client secret**.
+3. Uruchom jednorazową autoryzację (otworzy się URL do zalogowania kontem, które jest
+   właścicielem folderu "jellite"):
 
-Po udostępnieniu folderu zweryfikuj: `node infra/check-drive-access.mjs --name jellite`
-powinno pokazać folder na liście "Folders named jellite" (z adnotacją "regular folder, not
-a Shared Drive" w Wariancie B).
+   ```bash
+   npm run authorize --workspace sync -- \
+     --client-id <CLIENT_ID> \
+     --client-secret <CLIENT_SECRET> \
+     --token-file ./.oauth-token.json
+   ```
+
+4. Powstanie plik `.oauth-token.json` (poza repo, w `.gitignore` — wzorzec
+   `*oauth-token*.json`) z refresh tokenem — używany później przez skrypt sync
+   (`--oauth-token-file ./.oauth-token.json`). Ten krok wykonujesz **raz** (token się
+   odnawia automatycznie).
 
 ## 4. Sekrety / zmienne środowiskowe backendu
 
@@ -89,6 +95,9 @@ infra/sync-and-deploy.sh \
   --library-root /sciezka/do/korzenia/biblioteki \
   --master-list /Users/zenedith/git/radiomore/packages/music-sync/file1.sorted \
   --playlists-dir /Users/zenedith/git/radiomore/packages/music-sync/src/domain/playlist \
-  --drive-folder-id <ID_WSPOLDZIELONEGO_DYSKU_LUB_FOLDERU> \
-  --key-file /Users/zenedith/git/jellite/jellite-bf32aae81e7e.json
+  --drive-folder-id 1VO32-V4DGRr2WzG-boZAqo3Wmo9nHh1i \
+  --oauth-token-file /Users/zenedith/git/jellite/.oauth-token.json
 ```
+
+(`--key-file` nie jest już potrzebny do uploadu — patrz sekcja 3/3a. Klucz service accounta
+nadal służy tylko do odczytu/streamowania w backendzie w Cloud Run.)
