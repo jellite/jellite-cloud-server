@@ -32,3 +32,12 @@ async function handleStream(req: import("express").Request, res: import("express
 audioRouter.get("/Audio/:id/stream", handleStream);
 audioRouter.get("/Audio/:id/stream.:ext", handleStream);
 audioRouter.get("/Audio/:id/universal", handleStream);
+
+/**
+ * Finamp's actual direct-play URL (confirmed via its source, _songUri() in
+ * music_player_background_task.dart): for non-transcoded playback it builds
+ * "{baseUrl}/Items/{id}/File?ApiKey=...", NOT /Audio/{id}/stream. The same URL is
+ * also used by downloads_helper.dart for offline downloads. We didn't have this
+ * route at all, causing a 404 and silent playback failure.
+ */
+audioRouter.get("/Items/:id/File", handleStream);
