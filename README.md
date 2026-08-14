@@ -39,3 +39,15 @@ infra/sync-and-deploy.sh \
   --oauth-token-file ./.oauth-token.json
 ```
 
+### Gotowe skróty synchronizacji (bez deployu)
+
+Wymagają `.oauth-token.json` i (dla `unraid-sync`) `jellite-bf32aae81e7e.json` w korzeniu
+repo (skopiowanych z Twojej głównej maszyny — patrz sekcja poniżej o transferze sekretów).
+Zapisują bazę do `data/jellite.sqlite`, bez deployu na Cloud Run — użyj
+`infra/sync-and-deploy.sh`, gdy chcesz też wdrożyć.
+
+```bash
+npm run macos-sync    # biblioteka na tym Macu: /Volumes/music/LOSSLESS
+npm run unraid-sync   # biblioteka na serwerze Unraid: /mnt/user/music/LOSSLESS
+```
+

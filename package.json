@@ -10,7 +10,9 @@
   "scripts": {
     "build": "npm run build --workspace backend && npm run build --workspace sync",
     "sync": "npm run start --workspace sync --",
-    "dev:backend": "npm run dev --workspace backend"
+    "dev:backend": "npm run dev --workspace backend",
+    "unraid-sync": "npm run build --workspace sync && node sync/dist/index.js --library-root /mnt/user/music/LOSSLESS --playlists-dir /mnt/user/music/LOSSLESS/playlists --drive-folder-id 1VO32-V4DGRr2WzG-boZAqo3Wmo9nHh1i --db data/jellite.sqlite --oauth-token-file ./.oauth-token.json",
+    "macos-sync": "npm run build --workspace sync && node sync/dist/index.js --library-root /Volumes/music/LOSSLESS --playlists-dir /Volumes/music/LOSSLESS/playlists --drive-folder-id 1VO32-V4DGRr2WzG-boZAqo3Wmo9nHh1i --db data/jellite.sqlite --oauth-token-file ./.oauth-token.json"
   },
   "license": "UNLICENSED"
 }
