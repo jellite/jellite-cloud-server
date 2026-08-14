@@ -33,10 +33,17 @@ app.use(systemRouter);
 app.use(authRouter);
 app.get("/healthz", (_req, res) => res.send("ok"));
 
+// imagesRouter must be mounted before any router with a blanket `router.use(requireAuth)`
+// (users/items/playlists/audio/playbackInfo below) — Express invokes each mounted
+// router's own middleware for every request that reaches it (since they're all mounted
+// at "/"), so an earlier router's unconditional requireAuth would reject unauthenticated
+// image requests before imagesRouter ever got a chance to handle them (real Jellyfin
+// serves images without a token, and so does Finamp's image loader — see images.ts).
+app.use(imagesRouter);
+
 app.use(usersRouter);
 app.use(itemsRouter);
 app.use(playlistsRouter);
-app.use(imagesRouter);
 app.use(audioRouter);
 app.use(playbackInfoRouter);
 

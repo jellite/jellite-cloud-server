@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { requireAuth } from "../auth.js";
 import { getPlaylist, getPlaylistPrimaryTrack, getTrack } from "../db.js";
 
 export const imagesRouter = Router();
-imagesRouter.use(requireAuth);
+// No requireAuth here: real Jellyfin serves item images without a token, and clients
+// rely on that — Finamp's image widgets (e.g. AlbumImageProvider) fetch cover URLs via
+// a plain NetworkImage with no Authorization header/query param at all, so requiring
+// auth here just made every cover art request fail with 401.
 
 function sendCover(res: import("express").Response, cover: Buffer | null | undefined) {
   if (!cover) {
