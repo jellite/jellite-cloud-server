@@ -13,7 +13,9 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/backend/package.json ./package.json
-COPY --from=build /app/backend/node_modules ./node_modules
+# npm workspaces hoist dependencies to the repo-root node_modules/ (there is no
+# backend/node_modules/ unless a dependency can't be hoisted), so copy the root one.
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/backend/dist ./dist
 
 # The sqlite DB is rebuilt locally by the sync script and baked in at deploy time — see
