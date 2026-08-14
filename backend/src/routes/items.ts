@@ -32,6 +32,19 @@ itemsRouter.get("/Items", listPlaylists);
 itemsRouter.get("/Users/:userId/Items", listPlaylists);
 
 /**
+ * Jellite has no genre/album/artist metadata to browse (see SPEC.md — playlists only),
+ * so this always returns an empty, correctly-shaped list rather than 404ing. Some clients
+ * (e.g. Feishin) call this unconditionally on startup and choke on a missing route/error
+ * response even though an empty genre list is a perfectly normal Jellyfin answer.
+ */
+itemsRouter.get("/MusicGenres", (_req, res) => {
+  res.json({ Items: [], TotalRecordCount: 0, StartIndex: 0 });
+});
+itemsRouter.get("/Genres", (_req, res) => {
+  res.json({ Items: [], TotalRecordCount: 0, StartIndex: 0 });
+});
+
+/**
  * Fetches a single item by id — Finamp uses this for both playlists and tracks
  * (`/Users/{userId}/Items/{itemId}`).
  */

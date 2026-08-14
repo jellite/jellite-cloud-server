@@ -136,7 +136,11 @@ export function serverInfoPublic() {
     Id: config.serverId,
     ServerName: config.serverName,
     Version: config.serverVersion,
-    ProductName: "Jellite",
+    // The official web client (@jellyfin/sdk's discovery/recommended-server-discovery.ts)
+    // hard-rejects any server whose ProductName isn't exactly "Jellyfin Server" (scores it
+    // BAD and `findBestServer` refuses BAD scores outright — surfaces to the user as a
+    // generic "server not found", with no CORS/network error at all). Must match verbatim.
+    ProductName: "Jellyfin Server",
     OperatingSystem: "Cloud Run",
     StartupWizardCompleted: true,
   };

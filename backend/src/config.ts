@@ -24,7 +24,11 @@ export const config = {
   // Stable identifiers returned in Jellyfin-shaped responses.
   serverId: process.env.JELLITE_SERVER_ID ?? "jellite-server",
   serverName: process.env.JELLITE_SERVER_NAME ?? "Jellite",
-  serverVersion: process.env.JELLITE_SERVER_VERSION ?? "0.1.0",
+  // Reported to clients as the Jellyfin server version. The official web client
+  // (@jellyfin/sdk discovery logic) rejects/flags servers below its MINIMUM_VERSION or
+  // API_VERSION (throws "server version too low" for anything less than the client's
+  // built-in API_VERSION) — keep this at or above the current stable Jellyfin release.
+  serverVersion: process.env.JELLITE_SERVER_VERSION ?? "10.11.11",
   userId: process.env.JELLITE_USER_ID ?? "jellite-user",
 
   // Optional path to a service-account key file for Google Drive access. When unset, the
