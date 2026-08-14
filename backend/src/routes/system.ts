@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireAuth } from "../auth.js";
 import { serverInfoPublic } from "../jellyfinShapes.js";
 
 export const systemRouter = Router();
@@ -10,6 +11,13 @@ systemRouter.get("/System/Info/Public", (_req, res) => {
 
 systemRouter.get("/System/Ping", (_req, res) => {
   res.send("Jellite");
+});
+
+// Authenticated variant of System/Info/Public, requested by some clients (e.g. Feishin)
+// after login instead of/in addition to the public one. Same shape is fine here since
+// Jellite has no extra admin-only fields worth hiding (single static user, see SPEC.md).
+systemRouter.get("/System/Info", requireAuth, (_req, res) => {
+  res.json(serverInfoPublic());
 });
 
 // Unauthenticated: jellyfin-vue (and other web clients) fetch this right after

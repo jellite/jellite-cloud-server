@@ -10,6 +10,8 @@ import { imagesRouter } from "./routes/images.js";
 import { audioRouter } from "./routes/audio.js";
 import { playbackInfoRouter } from "./routes/playbackInfo.js";
 import { sessionsRouter } from "./routes/sessions.js";
+import { displayPreferencesRouter } from "./routes/displayPreferences.js";
+import { attachSocketServer } from "./routes/socket.js";
 
 const app = express();
 
@@ -73,10 +75,12 @@ app.use(playlistsRouter);
 app.use(audioRouter);
 app.use(playbackInfoRouter);
 app.use(sessionsRouter);
+app.use(displayPreferencesRouter);
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   // eslint-disable-next-line no-console
   console.log(`Jellite backend listening on port ${config.port}`);
 });
+attachSocketServer(server);

@@ -11,10 +11,14 @@ itemsRouter.use(requireAuth);
  * see musicLibraryItem() for why clients like Finamp need this instead of playlists
  * being returned directly here.
  */
-itemsRouter.get("/Users/:userId/Views", (_req, res) => {
+function listViews(_req: unknown, res: import("express").Response) {
   const library = musicLibraryItem();
   res.json({ Items: [library], TotalRecordCount: 1, StartIndex: 0 });
-});
+}
+
+itemsRouter.get("/Users/:userId/Views", listViews);
+// Some clients (e.g. Feishin) call the top-level "/UserViews?userId=..." form instead.
+itemsRouter.get("/UserViews", listViews);
 
 /**
  * Children of the "Music" library (or any other parentId/filter clients throw at us —

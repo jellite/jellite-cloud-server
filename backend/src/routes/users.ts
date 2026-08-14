@@ -7,15 +7,18 @@ import { userDto } from "../jellyfinShapes.js";
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
 
+usersRouter.get("/Users/Me", (_req, res) => {
+  res.json(userDto());
+});
+
+// This must be registered after the more specific "/Users/Me" route above — Express
+// matches routes in registration order, and "/Users/:userId" would otherwise swallow
+// "/Users/Me" first (userId="Me"), which never equals config.userId and 404s.
 usersRouter.get("/Users/:userId", (req, res) => {
   if (req.params.userId !== config.userId) {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  res.json(userDto());
-});
-
-usersRouter.get("/Users/Me", (_req, res) => {
   res.json(userDto());
 });
 

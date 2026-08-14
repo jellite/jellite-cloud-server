@@ -41,3 +41,10 @@ audioRouter.get("/Audio/:id/universal", handleStream);
  * route at all, causing a 404 and silent playback failure.
  */
 audioRouter.get("/Items/:id/File", handleStream);
+
+/**
+ * Feishin's direct-play URL (jellyfin-controller.ts getStreamUrl, non-transcode path):
+ * "{baseUrl}/Items/{id}/Download?apiKey=...&playSessionId=...". Same bytes as /File,
+ * just a different path real Jellyfin also exposes for downloads.
+ */
+audioRouter.get("/Items/:id/Download", handleStream);
