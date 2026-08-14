@@ -12,16 +12,25 @@ new/changed files to Google Drive (see [`docs/SPEC.md`](../docs/SPEC.md) section
 
 ## One-time OAuth authorization (required before the first real sync)
 
+**Status: already done and verified for this project** (see `../infra/setup-gcp.md`
+section 3a) — the resulting token lives at `/Users/zenedith/git/jellite/.oauth-token.json`
+(gitignored). The steps below are for reference / re-authorizing on a new machine or after
+revoking access.
+
 ```bash
 npm run authorize --workspace sync -- \
-  --client-id <OAUTH_CLIENT_ID> \
-  --client-secret <OAUTH_CLIENT_SECRET> \
-  --token-file ./.oauth-token.json
+  --client-secret-file /path/to/client_secret_...apps.googleusercontent.com.json \
+  --token-file /Users/zenedith/git/jellite/.oauth-token.json
 ```
+
+(`--client-id`/`--client-secret` are also accepted directly instead of
+`--client-secret-file`, if you'd rather not point at the downloaded JSON.)
 
 Opens a URL to sign in with the Google account that owns the Drive folder; saves a refresh
 token to `--token-file` (gitignored) for reuse by every subsequent sync. See
-`../infra/setup-gcp.md` section 3a for how to create the OAuth client.
+`../infra/setup-gcp.md` section 3a for how to create the OAuth client. Note: `npm run ...
+--workspace sync` sets the working directory to `sync/`, so relative paths passed to
+`--token-file`/`--client-secret-file` resolve from there — prefer absolute paths.
 
 ## Usage
 

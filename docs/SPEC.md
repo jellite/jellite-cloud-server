@@ -211,9 +211,11 @@ pomijany, jeśli baza się nie zmieniła).
 - Dokładny kształt JSON wymagany przez konkretną wersję klienta Finamp — do
   zweryfikowania empirycznie podczas implementacji backendu (może wymagać dodatkowych
   pól nieopisanych tutaj).
-- Format identyfikatora `id` utworu/playlisty (proponowane: `sha1` ścieżki
-  względnej / slug nazwy pliku) — do potwierdzenia przed pierwszą synchronizacją
-  (zmiana algorytmu po pierwszym uruchomieniu unieważni historię odtwarzania klienta).
+- Format identyfikatora `id` utworu/playlisty (`sha1` ścieżki względnej dla utworu,
+  slug nazwy pliku `.m3u` dla playlisty) — **potwierdzony realnym testem** (upload
+  pojedynczego utworu z prawdziwej biblioteki, patrz `sync/README.md`); nie zmieniać
+  algorytmu po pierwszej pełnej synchronizacji, bo unieważni to historię odtwarzania
+  klienta.
 - Docelowy rozmiar miniatury okładki (np. 300x300 JPEG) — do ustalenia z uwagi na
   rozmiar pliku SQLite wbudowywanego w obraz kontenera.
 - Polityka wersjonowania/nazewnictwa usługi Cloud Run oraz regionu GCP.
@@ -221,7 +223,7 @@ pomijany, jeśli baza się nie zmieniła).
 ## 9. Kolejne fazy (poza zakresem tego dokumentu)
 
 1. Implementacja backendu (Express + SQLite + Drive proxy).
-2. Implementacja skryptu synchronizacyjnego (parsowanie `.sorted`/`.m3u`, ekstrakcja
+2. Implementacja skryptu synchronizacyjnego (parsowanie `.m3u`, ekstrakcja
    tagów/okładek, upload Drive, przebudowa SQLite).
 3. Implementacja skryptów infrastruktury (Dockerfile, `gcloud run deploy`, konfiguracja
    Google Drive (OAuth2 do uploadu + service account do odczytu)).
