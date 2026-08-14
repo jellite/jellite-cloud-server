@@ -15,5 +15,5 @@ playlistsRouter.get("/Playlists/:id/Items", (req, res) => {
 
   const tracks = getPlaylistTracks(playlist.id);
   const items = tracks.map((track, index) => trackToItem(track, playlist.id, index));
-  res.json({ Items: items, TotalRecordCount: items.length });
+  res.json({ Items: items, TotalRecordCount: items.length, StartIndex: 0 });
 });

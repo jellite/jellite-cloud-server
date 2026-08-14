@@ -15,7 +15,7 @@ itemsRouter.use(requireAuth);
 function listPlaylistItems(_req: unknown, res: import("express").Response) {
   const playlists = getPlaylists();
   const items = playlists.map((playlist) => playlistToItem(playlist, getPlaylistTracks(playlist.id).length));
-  res.json({ Items: items, TotalRecordCount: items.length });
+  res.json({ Items: items, TotalRecordCount: items.length, StartIndex: 0 });
 }
 
 itemsRouter.get("/Users/:userId/Views", listPlaylistItems);
