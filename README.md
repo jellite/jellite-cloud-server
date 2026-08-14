@@ -31,6 +31,6 @@ npm install                         # instaluje backend + sync (npm workspaces)
 npm run build                       # kompiluje oba pakiety TypeScript
 
 # jednorazowa konfiguracja GCP — patrz infra/setup-gcp.md
-infra/sync-and-deploy.sh --library-root ... --master-list ... --playlists-dir ... \
-  --drive-folder-id ... --key-file ./jellite-bf32aae81e7e.json
+infra/sync-and-deploy.sh --library-root ... --playlists-dir ... \
+  --drive-folder-id ... --oauth-token-file ./.oauth-token.json
 ```

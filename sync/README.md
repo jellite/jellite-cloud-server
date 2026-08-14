@@ -30,8 +30,7 @@ npm install   # from repo root
 
 npm run sync -- \
   --library-root /path/to/music/root \
-  --master-list /path/to/file1.sorted \
-  --playlists-dir /path/to/src/domain/playlist \
+  --playlists-dir /path/to/playlists \
   --db /path/to/jellite/data/jellite.sqlite \
   --drive-folder-id <drive-folder-id> \
   --oauth-token-file ./.oauth-token.json
@@ -43,15 +42,20 @@ real Drive file id, and `--oauth-token-file` isn't required).
 
 ## What it does
 
-1. Reads the master list (`--master-list`) — the full, deduplicated list of relative track
-   paths — and diffs it against tracks already present in the DB (matched by path + file
-   size) to find new or changed files.
-2. For each new/changed file: extracts tags (title/artist/album/duration) and a resized
+1. Reads every `.m3u` file in `--playlists-dir` and collects the union of every track path
+   they reference (paths in `.m3u` files are relative to the playlists directory itself,
+   e.g. `../Artist/Foo/Bar.flac` — these get resolved and re-expressed relative to
+   `--library-root` for storage). Only files that are actually on a playlist are ever
+   touched — the library root is never scanned wholesale.
+2. Diffs that set against tracks already present in the DB (matched by path + file size) to
+   find new or changed files.
+3. For each new/changed file: extracts tags (title/artist/album/duration) and a resized
    (300x300 JPEG) cover thumbnail from embedded FLAC/M4A tags, uploads the raw audio file to
    the configured Drive folder, and upserts a `tracks` row.
-3. Reads every `.m3u` file in `--playlists-dir` and rebuilds the `playlists` /
-   `playlist_tracks` tables (playlist name = file name, order = file order).
-4. Logs (without deleting) any tracks present in the DB but no longer in the master list.
+4. Rebuilds the `playlists` / `playlist_tracks` tables from the parsed `.m3u` files
+   (playlist name = file name, order = file order).
+5. Logs (without deleting) any tracks present in the DB but no longer referenced by any
+   playlist.
 
 ## Typical end-to-end flow
 

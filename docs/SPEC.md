@@ -119,30 +119,37 @@ osobny endpoint API do tego celu.
 Skrypt uruchamiany **lokalnie** (nie w chmurze), z dostępem do lokalnej biblioteki
 muzycznej i lokalnej kopii pliku SQLite. Wejścia:
 
-1. Ścieżka do pliku master listy (np. `file1.sorted`) — pełna, posortowana,
-   zdeduplikowana lista wszględnych ścieżek wszystkich unikalnych utworów w bibliotece.
-2. Ścieżka do katalogu z playlistami `.m3u` (nazwa pliku = nazwa playlisty, linie =
-   ścieżki względne do utworów, w kolejności odtwarzania).
-3. Ścieżka do katalogu-korzenia lokalnej biblioteki (do rozwiązywania ścieżek
-   względnych na pliki fizyczne).
-4. Ścieżka do lokalnego pliku bazy SQLite (tworzona, jeśli nie istnieje).
+1. Ścieżka do katalogu z playlistami `.m3u` (nazwa pliku = nazwa playlisty, linie =
+   ścieżki względne do utworów — względem katalogu playlist, w kolejności odtwarzania).
+2. Ścieżka do katalogu-korzenia lokalnej biblioteki (do rozwiązywania ścieżek
+   względnych na pliki fizyczne oraz do zapisu `relative_path` w bazie).
+3. Ścieżka do lokalnego pliku bazy SQLite (tworzona, jeśli nie istnieje).
+
+Nie ma osobnej "master listy" — zbiór utworów do zsynchronizowania to **suma wszystkich
+ścieżek występujących na jakiejkolwiek playliście `.m3u`**. Pliki obecne w bibliotece,
+ale nienależące do żadnej playlisty, są całkowicie pomijane (nigdy nie skanujemy całego
+katalogu biblioteki).
 
 Kroki:
 
-1. **Diff nowych plików** — porównanie master listy z `relative_path` już obecnymi
-   w tabeli `tracks` (dopasowanie dodatkowo po `file_size`, aby wykryć zmienione pliki).
-2. **Dla każdego nowego/zmienionego pliku**:
+1. **Zebranie ścieżek** — parsowanie wszystkich plików `.m3u` w katalogu playlist,
+   zsumowanie unikalnych ścieżek utworów (znormalizowanych względem korzenia
+   biblioteki).
+2. **Diff nowych plików** — porównanie zebranych ścieżek z `relative_path` już
+   obecnymi w tabeli `tracks` (dopasowanie dodatkowo po `file_size`, aby wykryć
+   zmienione pliki).
+3. **Dla każdego nowego/zmienionego pliku**:
    - odczyt tagów (artist/title/album/duration) i osadzonej okładki,
    - wygenerowanie miniatury okładki (zmniejszenie do rozsądnego rozmiaru, JPEG),
    - upload surowego pliku audio na Google Drive (przez OAuth2, patrz sekcja 6) (jeśli jeszcze nie wgrany),
    - zapis/aktualizacja rekordu w `tracks` (w tym `drive_file_id`).
-3. **Przebudowa playlist** — dla każdego pliku `.m3u`: upsert rekordu w `playlists`,
+4. **Przebudowa playlist** — dla każdego pliku `.m3u`: upsert rekordu w `playlists`,
    usunięcie starych wpisów w `playlist_tracks` dla tej playlisty i wstawienie na
    nowo w aktualnej kolejności (dopasowanie utworów po `relative_path`).
-4. **Wykrywanie osieroconych utworów** — utwory obecne w bazie, ale nieobecne już w
-   master liście: **tylko log ostrzeżenia** (bez automatycznego usuwania z Drive/bazy
-   w v1).
-5. **Deploy** — wywołanie skryptu deployu, który buduje obraz kontenera backendu z
+5. **Wykrywanie osieroconych utworów** — utwory obecne w bazie, ale nieobecne już na
+   żadnej playliście: **tylko log ostrzeżenia** (bez automatycznego usuwania z
+   Drive/bazy w v1).
+6. **Deploy** — wywołanie skryptu deployu, który buduje obraz kontenera backendu z
    aktualnym plikiem SQLite wbudowanym w obraz i wdraża go na Cloud Run
    (`gcloud run deploy --source ...`).
 

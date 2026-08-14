@@ -22,7 +22,7 @@ function requireArg(args: Record<string, string | boolean>, name: string): strin
   const value = args[name];
   if (typeof value !== "string") {
     throw new Error(
-      `Missing required argument --${name}. Usage: --library-root <path> --master-list <path> --playlists-dir <path> --db <path> --drive-folder-id <id> [--oauth-token-file <path>] [--username <name>] [--user-id <id>] [--dry-run]`
+      `Missing required argument --${name}. Usage: --library-root <path> --playlists-dir <path> --db <path> --drive-folder-id <id> [--oauth-token-file <path>] [--username <name>] [--user-id <id>] [--dry-run]`
     );
   }
   return value;
@@ -33,7 +33,6 @@ async function main() {
 
   const options = {
     libraryRoot: resolve(requireArg(args, "library-root")),
-    masterListPath: resolve(requireArg(args, "master-list")),
     playlistsDir: resolve(requireArg(args, "playlists-dir")),
     dbPath: resolve(requireArg(args, "db")),
     driveFolderId: args["dry-run"] ? String(args["drive-folder-id"] ?? "DRY_RUN") : requireArg(args, "drive-folder-id"),

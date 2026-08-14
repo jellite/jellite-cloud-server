@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# End-to-end "one command" flow requested in the initial ask: sync the library described by
-# the master list + .m3u playlists into the local SQLite DB (uploading only new files to the
-# Shared Drive), then redeploy the backend with that DB baked into the image.
+# End-to-end "one command" flow requested in the initial ask: scan every `.m3u` playlist,
+# sync only the tracks they reference into the local SQLite DB (uploading only new/changed
+# files to Drive), then redeploy the backend with that DB baked into the image.
 #
 # Usage:
 #   infra/sync-and-deploy.sh \
 #     --library-root /path/to/music/root \
-#     --master-list /path/to/file1.sorted \
-#     --playlists-dir /path/to/src/domain/playlist \
-#     --drive-folder-id <shared-drive-or-folder-id> \
-#     --key-file /path/to/jellite-bf32aae81e7e.json
+#     --playlists-dir /path/to/playlists \
+#     --drive-folder-id <folder-id> \
+#     --oauth-token-file /path/to/.oauth-token.json
 #
 # Any GCP env vars understood by infra/deploy.sh (GCP_PROJECT, GCP_REGION, ...) also apply.
 set -euo pipefail

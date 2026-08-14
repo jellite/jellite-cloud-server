@@ -12,12 +12,10 @@ import {
 import { createOAuthDriveClient, uploadAudioFile } from "./drive.js";
 import { trackId, playlistId } from "./ids.js";
 import { extractMetadata } from "./metadata.js";
-import { parseMasterList } from "./parseMasterList.js";
 import { parsePlaylistsDir } from "./parseM3u.js";
 
 export interface SyncOptions {
   libraryRoot: string;
-  masterListPath: string;
   playlistsDir: string;
   dbPath: string;
   driveFolderId: string;
@@ -40,9 +38,11 @@ export interface SyncResult {
 }
 
 /**
- * Runs one full sync pass: uploads new/changed audio files to the Shared Drive, rebuilds
- * playlist definitions from `.m3u` files, and reports (without deleting) tracks that are
- * no longer referenced by the master list. See docs/SPEC.md section 5.
+ * Runs one full sync pass: scans every `.m3u` file in `playlistsDir`, uploads any new/changed
+ * audio files they reference to Drive (only files that are on at least one playlist — the
+ * library folder itself is never scanned wholesale), rebuilds playlist definitions, and
+ * reports (without deleting) tracks that are no longer referenced by any playlist. See
+ * docs/SPEC.md section 5.
  */
 export async function runSync(options: SyncOptions): Promise<SyncResult> {
   if (!options.dryRun && !options.oauthTokenFilePath) {
@@ -56,14 +56,19 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
 
   upsertUser(db, options.username, options.userId);
 
-  const masterPaths = await parseMasterList(options.masterListPath);
+  const playlists = await parsePlaylistsDir(options.playlistsDir, options.libraryRoot);
+  const referencedPaths = new Set<string>();
+  for (const playlist of playlists) {
+    for (const path of playlist.trackPaths) referencedPaths.add(path);
+  }
+
   const existingPaths = getAllTrackPaths(db);
 
   let newTracks = 0;
-  for (const relativePath of masterPaths) {
+  for (const relativePath of referencedPaths) {
     const absolutePath = resolve(options.libraryRoot, relativePath);
     if (!existsSync(absolutePath)) {
-      console.warn(`Skipping missing file referenced by master list: ${relativePath}`);
+      console.warn(`Skipping missing file referenced by a playlist: ${relativePath}`);
       continue;
     }
 
@@ -94,7 +99,6 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
     existingPaths.add(relativePath);
   }
 
-  const playlists = await parsePlaylistsDir(options.playlistsDir);
   for (const playlist of playlists) {
     const id = playlistId(playlist.name);
     upsertPlaylist(db, id, playlist.name);
@@ -112,11 +116,10 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
     replacePlaylistTracks(db, id, trackIds);
   }
 
-  const masterSet = new Set(masterPaths);
-  const orphanedTracks = [...existingPaths].filter((path) => !masterSet.has(path));
+  const orphanedTracks = [...existingPaths].filter((path) => !referencedPaths.has(path));
   if (orphanedTracks.length > 0) {
     console.warn(
-      `${orphanedTracks.length} track(s) are in the DB but no longer in the master list (not deleted automatically):`,
+      `${orphanedTracks.length} track(s) are in the DB but no longer referenced by any playlist (not deleted automatically):`,
       orphanedTracks
     );
   }

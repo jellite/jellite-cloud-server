@@ -92,9 +92,8 @@ export GCP_PROJECT=jellite
 export RUNTIME_SERVICE_ACCOUNT=jellite-service-account@jellite.iam.gserviceaccount.com
 
 infra/sync-and-deploy.sh \
-  --library-root /sciezka/do/korzenia/biblioteki \
-  --master-list /Users/zenedith/git/radiomore/packages/music-sync/file1.sorted \
-  --playlists-dir /Users/zenedith/git/radiomore/packages/music-sync/src/domain/playlist \
+  --library-root /Volumes/music/LOSSLESS \
+  --playlists-dir /Volumes/music/LOSSLESS/playlists \
   --drive-folder-id 1VO32-V4DGRr2WzG-boZAqo3Wmo9nHh1i \
   --oauth-token-file /Users/zenedith/git/jellite/.oauth-token.json
 ```
