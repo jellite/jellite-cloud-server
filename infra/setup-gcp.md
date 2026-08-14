@@ -26,14 +26,43 @@ przez wzorzec `jellite-*.json`).
 
 ## 3. Google Shared Drive z muzyką
 
-Service account **nie ma własnego miejsca na Google Drive** (0 GB na "Mój dysk") — dlatego
-pliki muszą trafiać na **Współdzielony dysk (Shared Drive)** w ramach Google Workspace:
+Service account **nie ma własnego miejsca na Google Drive** (0 GB na "Mój dysk"), a
+**diagnostyka (patrz niżej) potwierdziła, że SA na razie nic nie widzi** — folder trzeba
+jeszcze udostępnić. Sposób zależy od typu konta Google, na którym jest folder "jellite":
 
-1. W Google Drive (konto Workspace) utwórz nowy Współdzielony dysk, np. "Jellite Music".
+### Wariant A — masz Google Workspace (konto firmowe/organizacyjne)
+
+1. W Google Drive utwórz nowy **Współdzielony dysk** (Shared Drive), np. "Jellite Music"
+   (menu "Współdzielone dyski" w lewym pasku — jeśli go nie widzisz, konto nie jest
+   Workspace, użyj Wariantu B).
 2. Dodaj `jellite-service-account@jellite.iam.gserviceaccount.com` jako członka z rolą
    **Menedżer treści** (Content Manager) lub wyższą.
-3. Skopiuj **ID** dysku/folderu z URL (fragment po `/folders/`) — to jest wartość
-   `--drive-folder-id` przekazywana do skryptu sync.
+3. Przenieś/wgraj tam pliki muzyczne (albo pozwól, by robił to skrypt sync).
+4. ID dysku znajdziesz w URL po `/drive/folders/` — to jest `--drive-folder-id`.
+5. Zweryfikuj: `node infra/check-drive-access.mjs` powinno pokazać dysk na liście
+   "Shared Drives the service account is a member of".
+
+### Wariant B — zwykłe konto Gmail (bez Workspace)
+
+Zwykłe konto Gmail nie ma Współdzielonych dysków. Opcje:
+
+- **B1 (prostsza, ale z ograniczeniem)**: udostępnij istniejący folder "jellite" ze
+  swojego "Mojego dysku" bezpośrednio kontu
+  `jellite-service-account@jellite.iam.gserviceaccount.com` (jak zwykłemu
+  współpracownikowi — prawo "Edytor"). SA będzie mógł wtedy **czytać/streamować** pliki
+  z tego folderu (to wystarcza dla backendu). **Uwaga**: nowe pliki wgrywane przez SA do
+  tego folderu stają się własnością SA i zużywają jego zerowy limit miejsca — **upload
+  przez skrypt sync się nie powiedzie**. W tym wariancie pliki audio trzeba wgrywać do
+  folderu ręcznie (Twoim kontem), a skrypt sync uruchamiać z `--dry-run` pomijając upload,
+  albo ręcznie uzupełniać `drive_file_id` w bazie.
+- **B2 (zalecana, jeśli zależy na automatycznym uploadzie)**: kup/aktywuj Google
+  Workspace (nawet najtańszy plan) dla domeny/konta, żeby mieć dostęp do prawdziwych
+  Współdzielonych dysków (Wariant A) — to jedyny sposób, by SA miał własny limit miejsca
+  do zapisu.
+
+Po udostępnieniu folderu zweryfikuj: `node infra/check-drive-access.mjs --name jellite`
+powinno pokazać folder na liście "Folders named jellite" (z adnotacją "regular folder, not
+a Shared Drive" w Wariancie B).
 
 ## 4. Sekrety / zmienne środowiskowe backendu
 
