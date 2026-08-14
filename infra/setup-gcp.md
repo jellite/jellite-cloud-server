@@ -46,29 +46,29 @@ Alternatywa na przyszłość: aktywacja Google Workspace i przeniesienie muzyki 
 Współdzielony dysk (SA jako Content Manager) eliminuje potrzebę OAuth i pozwala SA też
 wgrywać pliki — nieobowiązkowe, obecne rozwiązanie działa bez tego.
 
-## 3a. Jednorazowa autoryzacja OAuth2 (do uploadu)
+## 3a. Jednorazowa autoryzacja OAuth2 (do uploadu) — ✅ wykonane i zweryfikowane
 
-1. W [GCP Console](https://console.cloud.google.com/apis/credentials?project=jellite) →
-   **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
-   - Typ aplikacji: **Desktop app**.
-   - Jeśli to pierwszy OAuth client w projekcie, skonfiguruj najpierw "OAuth consent
-     screen" (typ "External", status "Testing" wystarczy — dodaj swój adres e-mail jako
-     "Test user").
-2. Pobierz/skopiuj wygenerowany **Client ID** i **Client secret**.
-3. Uruchom jednorazową autoryzację (otworzy się URL do zalogowania kontem, które jest
-   właścicielem folderu "jellite"):
+1. Utworzony OAuth Client ID typu **Desktop app** w GCP Console, projekt `jellite`
+   (plik pobrany do `~/Downloads/client_secret_...apps.googleusercontent.com.json`).
+2. Uruchomiona jednorazowa autoryzacja bezpośrednio z pobranego pliku (obsługiwane przez
+   `--client-secret-file`, bez ręcznego kopiowania Client ID/Secret). **Uwaga**: `npm run
+   ... --workspace sync` uruchamia skrypt z katalogiem roboczym ustawionym na `sync/`, więc
+   ścieżki względne rozwiążą się względem `sync/`, a nie głównego katalogu repo — użyj
+   ścieżek bezwzględnych:
 
    ```bash
    npm run authorize --workspace sync -- \
-     --client-id <CLIENT_ID> \
-     --client-secret <CLIENT_SECRET> \
-     --token-file ./.oauth-token.json
+     --client-secret-file /Users/zenedith/Downloads/client_secret_*.apps.googleusercontent.com.json \
+     --token-file /Users/zenedith/git/jellite/.oauth-token.json
    ```
 
-4. Powstanie plik `.oauth-token.json` (poza repo, w `.gitignore` — wzorzec
-   `*oauth-token*.json`) z refresh tokenem — używany później przez skrypt sync
-   (`--oauth-token-file ./.oauth-token.json`). Ten krok wykonujesz **raz** (token się
-   odnawia automatycznie).
+3. Powstał plik `.oauth-token.json` w katalogu głównym repo (poza gitem, w `.gitignore` —
+   wzorzec `*oauth-token*.json`) z refresh tokenem — używany przez skrypt sync
+   (`--oauth-token-file /Users/zenedith/git/jellite/.oauth-token.json`).
+
+**Zweryfikowano end-to-end**: prawdziwy testowy upload pliku do folderu "jellite" tym
+tokenem zakończył się sukcesem (właściciel pliku = konto użytkownika, nie SA; plik od razu
+usunięty po teście) — mechanizm w pełni działa.
 
 ## 4. Sekrety / zmienne środowiskowe backendu
 

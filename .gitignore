@@ -16,6 +16,7 @@ service-account*.json
 credentials*.json
 jellite-*.json
 *oauth-token*.json
-
+client_secret*.json
+client_secret*.json
 .DS_Store
 .idea/
