@@ -1,0 +1,16 @@
+{
+  "name": "jellite",
+  "private": true,
+  "version": "0.1.0",
+  "description": "API-only, Jellyfin-compatible music server backed by Google Drive + SQLite, deployed on Cloud Run.",
+  "workspaces": [
+    "backend",
+    "sync"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace backend && npm run build --workspace sync",
+    "sync": "npm run start --workspace sync --",
+    "dev:backend": "npm run dev --workspace backend"
+  },
+  "license": "UNLICENSED"
+}

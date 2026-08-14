@@ -8,14 +8,29 @@ Pełna specyfikacja projektu: [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-Projekt jest w fazie specyfikacji — implementacja backendu, skryptu synchronizacyjnego
-i infrastruktury nastąpi w kolejnych etapach (patrz sekcja "Kolejne fazy" w SPEC.md).
+Faza specyfikacji ukończona. Faza 2 (implementacja) gotowa: działający backend (Express +
+SQLite + Google Drive proxy), skrypt synchronizacji biblioteki oraz skrypty wdrożeniowe na
+Cloud Run. Zweryfikowane lokalnie end-to-end (sync → SQLite → API). Pozostaje: realny test
+z Google Shared Drive i wdrożeniem na Cloud Run (wymaga jednorazowej konfiguracji GCP, patrz
+`infra/setup-gcp.md`).
 
 ## Struktura repozytorium
 
 ```
-docs/     — specyfikacja projektu
-backend/  — (placeholder) serwer API kompatybilny z Jellyfin
-sync/     — (placeholder) skrypt synchronizacji biblioteki -> Drive + SQLite + deploy
-infra/    — (placeholder) skrypty/konfiguracja wdrożeniowa (Cloud Run, Dockerfile)
+docs/     — specyfikacja projektu (docs/SPEC.md)
+backend/  — serwer API kompatybilny z Jellyfin (Express + TypeScript)
+sync/     — skrypt synchronizacji biblioteki -> Google Drive + SQLite
+infra/    — skrypty wdrożeniowe (Cloud Run) + jednorazowa konfiguracja GCP
+data/     — lokalna baza jellite.sqlite (generowana przez sync, niecommitowana)
+```
+
+## Szybki start
+
+```bash
+npm install                         # instaluje backend + sync (npm workspaces)
+npm run build                       # kompiluje oba pakiety TypeScript
+
+# jednorazowa konfiguracja GCP — patrz infra/setup-gcp.md
+infra/sync-and-deploy.sh --library-root ... --master-list ... --playlists-dir ... \
+  --drive-folder-id ... --key-file ./jellite-bf32aae81e7e.json
 ```

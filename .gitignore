@@ -6,11 +6,15 @@ dist/
 *.sqlite
 *.sqlite3
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 
 # Google service account keys / credentials
 *.key.json
 service-account*.json
 credentials*.json
+jellite-*.json
 
 .DS_Store
+.idea/
