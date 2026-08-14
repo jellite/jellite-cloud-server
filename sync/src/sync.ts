@@ -196,6 +196,10 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
     );
   }
 
+  // Checkpoint WAL into the main DB file so data/jellite.sqlite is immediately consistent
+  // and ready to commit/deploy without a separate manual step (WAL mode otherwise leaves
+  // recent writes only in the -wal sidecar file, which is gitignored and not deployed).
+  db.pragma("wal_checkpoint(TRUNCATE)");
   db.close();
   const durationMs = Date.now() - startedAt;
   console.log(`Sync finished in ${formatDuration(durationMs)}.`);

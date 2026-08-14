@@ -11,8 +11,9 @@ Pełna specyfikacja projektu: [`docs/SPEC.md`](docs/SPEC.md).
 
 Faza specyfikacji i implementacji (backend + sync + infra) ukończone. Konfiguracja Google
 Drive/OAuth **wykonana i zweryfikowana end-to-end** realnym uploadem utworu z biblioteki
-(patrz `infra/setup-gcp.md`) — sync jest gotowy do użycia. Pozostaje: pierwsza pełna
-synchronizacja całej biblioteki i pierwszy realny deploy na Cloud Run.
+(patrz `infra/setup-gcp.md`) — sync jest gotowy do użycia. Pierwsza pełna synchronizacja
+całej biblioteki (12692 utworów, 35 playlist) i pierwszy deploy na Cloud Run **zakończone
+sukcesem** — serwis odpowiada poprawnie na realne żądania Jellyfin API.
 
 ## Struktura repozytorium
 
@@ -21,14 +22,20 @@ docs/     — specyfikacja projektu (docs/SPEC.md)
 backend/  — serwer API kompatybilny z Jellyfin (Express + TypeScript)
 sync/     — skrypt synchronizacji biblioteki (playlisty .m3u) -> Google Drive + SQLite
 infra/    — skrypty wdrożeniowe (Cloud Run) + jednorazowa konfiguracja GCP
-data/     — lokalna baza jellite.sqlite (generowana przez sync, niecommitowana)
+data/     — baza jellite.sqlite, commitowana do repo przez Git LFS (patrz data/README.md)
 ```
+
+**Wymaga Git LFS** (`brew install git-lfs && git lfs install`) — `data/jellite.sqlite` jest
+dużym plikiem binarnym zmieniającym się przy każdym syncu i jest śledzony przez LFS, żeby
+`git clone`/`fetch` pobierały tylko aktualną wersję zamiast każdej historycznej z osobna.
 
 ## Szybki start
 
 ```bash
+git lfs install                     # jednorazowo, przed pierwszym clone/pull tego repo
 npm install                         # instaluje backend + sync (npm workspaces)
 npm run build                       # kompiluje oba pakiety TypeScript
+npm run backend                     # uruchamia sam backend (bez syncu), na porcie 8080
 
 # jednorazowa konfiguracja GCP + OAuth — patrz infra/setup-gcp.md (już wykonana dla
 # obecnego projektu/konta; poniższe potrzebne tylko przy uruchamianiu od zera)
