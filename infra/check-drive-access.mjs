@@ -4,7 +4,7 @@
 // Run this after following the sharing steps in infra/setup-gcp.md to confirm access
 // before running the real sync.
 //
-// Usage: node infra/check-drive-access.mjs [--key-file ./jellite-bf32aae81e7e.json] [--name jellite]
+// Usage: node infra/check-drive-access.mjs [--key-file ./service-account.json] [--name jellite]
 import { google } from "googleapis";
 import { resolve } from "node:path";
 
@@ -20,7 +20,7 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const keyFile = resolve(args["key-file"] ?? "./jellite-bf32aae81e7e.json");
+const keyFile = resolve(args["key-file"] ?? "./service-account.json");
 const searchName = args["name"] ?? "jellite";
 
 const auth = new google.auth.GoogleAuth({

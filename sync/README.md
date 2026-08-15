@@ -13,14 +13,14 @@ new/changed files to Google Drive (see [`docs/SPEC.md`](../docs/SPEC.md) section
 ## One-time OAuth authorization (required before the first real sync)
 
 **Status: already done and verified for this project** (see `../infra/setup-gcp.md`
-section 3a) — the resulting token lives at `/Users/zenedith/git/jellite/.oauth-token.json`
+section 3a) — the resulting token lives at `/path/to/jellite/.oauth-token.json`
 (gitignored). The steps below are for reference / re-authorizing on a new machine or after
 revoking access.
 
 ```bash
 npm run authorize --workspace sync -- \
   --client-secret-file /path/to/client_secret_...apps.googleusercontent.com.json \
-  --token-file /Users/zenedith/git/jellite/.oauth-token.json
+  --token-file /path/to/jellite/.oauth-token.json
 ```
 
 (`--client-id`/`--client-secret` are also accepted directly instead of

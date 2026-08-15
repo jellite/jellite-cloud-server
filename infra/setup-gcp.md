@@ -1,102 +1,103 @@
-# Jednorazowa konfiguracja GCP
+# One-time GCP setup
 
-Kroki wykonywane raz, ręcznie, przed pierwszym `infra/sync-and-deploy.sh`.
+Steps performed once, manually, before the first `infra/sync-and-deploy.sh` run.
 
-## 1. Projekt GCP i wymagane API
+## 1. GCP project and required APIs
 
 ```bash
-gcloud config set project jellite
+gcloud config set project <your-gcp-project>
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com drive.googleapis.com
 ```
 
 ## 2. Service account
 
-Masz już plik klucza (`jellite-bf32aae81e7e.json`, SA:
-`jellite-service-account@jellite.iam.gserviceaccount.com`, projekt `jellite`). Ten sam SA
-pełni dwie role:
+Create a service account key (`<your-service-account>.json`, e.g.
+`jellite-service-account@<your-gcp-project>.iam.gserviceaccount.com`). This same SA plays
+two roles:
 
-- **Lokalnie (skrypt sync)**: uwierzytelnia się kluczem JSON, żeby wgrywać nowe pliki na
-  Shared Drive.
-- **W Cloud Run (backend)**: powinien być podpięty jako *runtime service account* usługi
-  (`--service-account` w `infra/deploy.sh`), dzięki czemu backend czyta z Google Drive przez
-  Application Default Credentials — **bez** kopiowania pliku klucza do obrazu kontenera.
+- **Locally (sync script)**: not used for uploads — see section 3 below for why.
+- **In Cloud Run (backend)**: should be attached as the service's *runtime service
+  account* (`--service-account` in `infra/deploy.sh`), so the backend reads from Google
+  Drive via Application Default Credentials — **without** copying the key file into the
+  container image.
 
-Upewnij się, że plik klucza **nigdy** nie trafia do repozytorium (już objęty `.gitignore`
-przez wzorzec `jellite-*.json`).
+Make sure the key file **never** ends up in the repository (already covered by
+`.gitignore` via the `jellite-*.json` / `service-account*.json` patterns).
 
-## 3. Google Drive z muzyką — status potwierdzony
+## 3. Google Drive with your music
 
-Uruchomiony `node infra/check-drive-access.mjs` potwierdził:
+Run `node infra/check-drive-access.mjs` to confirm:
 
-- **Folder "jellite" istnieje i jest udostępniony service accountowi**
-  (id: `1VO32-V4DGRr2WzG-boZAqo3Wmo9nHh1i`).
-- To **zwykły folder** na "Moim dysku", **nie** Współdzielony dysk (SA nie jest członkiem
-  żadnego Shared Drive) — a więc konto nie ma (jeszcze) Google Workspace.
-- **Odczyt działa** (SA widzi zawartość folderu — potrzebne do streamowania w backendzie).
-- **Upload nie działa**: próbny upload zwrócił `storageQuotaExceeded` — "Service Accounts
-  do not have storage quota. Leverage shared drives ... or use OAuth delegation instead."
-  Service account ma zawsze 0 GB własnego miejsca, niezależnie od nadanych uprawnień.
+- The Drive folder with your music exists and is shared with the service account.
+- Whether it's a regular folder in "My Drive" or a Shared Drive (SA membership implies
+  Google Workspace).
+- Whether **read** access works (SA can see the folder contents — needed for backend
+  streaming).
+- Whether **upload** works. If your account is not on Google Workspace, a regular "My
+  Drive" folder will reject service-account uploads with `storageQuotaExceeded` —
+  "Service Accounts do not have storage quota. Leverage shared drives ... or use OAuth
+  delegation instead." Service accounts always have 0 GB of their own storage,
+  regardless of granted permissions.
 
-**Rozwiązanie zaimplementowane w tym repo**: skrypt sync wykonuje upload przez **OAuth2
-jako Twoje własne konto Google** (patrz sekcja 3a), a nie przez service account. Backend w
-Cloud Run nadal używa service accounta wyłącznie do odczytu/streamowania — to działa już
-teraz, bez zmian.
+**Solution implemented in this repo**: the sync script uploads via **OAuth2 as your own
+Google account** (see section 3a below), not the service account. The backend on Cloud
+Run still uses the service account exclusively for read/streaming — that works
+regardless of the Workspace/My Drive distinction.
 
-Alternatywa na przyszłość: aktywacja Google Workspace i przeniesienie muzyki na prawdziwy
-Współdzielony dysk (SA jako Content Manager) eliminuje potrzebę OAuth i pozwala SA też
-wgrywać pliki — nieobowiązkowe, obecne rozwiązanie działa bez tego.
+Future alternative: activating Google Workspace and moving the music to a real Shared
+Drive (SA as Content Manager) removes the need for OAuth and lets the SA upload files
+too — optional, the current setup works without it.
 
-## 3a. Jednorazowa autoryzacja OAuth2 (do uploadu) — ✅ wykonane i zweryfikowane
+## 3a. One-time OAuth2 authorization (for uploads)
 
-1. Utworzony OAuth Client ID typu **Desktop app** w GCP Console, projekt `jellite`
-   (plik pobrany do `~/Downloads/client_secret_...apps.googleusercontent.com.json`).
-2. Uruchomiona jednorazowa autoryzacja bezpośrednio z pobranego pliku (obsługiwane przez
-   `--client-secret-file`, bez ręcznego kopiowania Client ID/Secret). **Uwaga**: `npm run
-   ... --workspace sync` uruchamia skrypt z katalogiem roboczym ustawionym na `sync/`, więc
-   ścieżki względne rozwiążą się względem `sync/`, a nie głównego katalogu repo — użyj
-   ścieżek bezwzględnych:
+1. Create an OAuth Client ID of type **Desktop app** in the GCP Console, in your project
+   (download the file to e.g. `~/Downloads/client_secret_...apps.googleusercontent.com.json`).
+2. Run the one-time authorization directly from the downloaded file (supported via
+   `--client-secret-file`, no need to manually copy the Client ID/Secret). **Note**:
+   `npm run ... --workspace sync` runs the script with its working directory set to
+   `sync/`, so relative paths resolve from there, not the repo root — use absolute
+   paths:
 
    ```bash
    npm run authorize --workspace sync -- \
-     --client-secret-file /Users/zenedith/Downloads/client_secret_*.apps.googleusercontent.com.json \
-     --token-file /Users/zenedith/git/jellite/.oauth-token.json
+     --client-secret-file /path/to/client_secret_*.apps.googleusercontent.com.json \
+     --token-file /path/to/jellite/.oauth-token.json
    ```
 
-3. Powstał plik `.oauth-token.json` w katalogu głównym repo (poza gitem, w `.gitignore` —
-   wzorzec `*oauth-token*.json`) z refresh tokenem — używany przez skrypt sync
-   (`--oauth-token-file /Users/zenedith/git/jellite/.oauth-token.json`).
+3. This produces a `.oauth-token.json` file in the repo root (gitignored — pattern
+   `*oauth-token*.json`) containing a refresh token, used by the sync script on every
+   subsequent run (`--oauth-token-file /path/to/jellite/.oauth-token.json`).
 
-**Zweryfikowano end-to-end**: prawdziwy testowy upload pliku do folderu "jellite" tym
-tokenem zakończył się sukcesem (właściciel pliku = konto użytkownika, nie SA; plik od razu
-usunięty po teście) — mechanizm w pełni działa.
+Verify end-to-end by doing a real test upload of a single file to your Drive folder with
+this token before running a full sync.
 
-## 4. Sekrety / zmienne środowiskowe backendu
+## 4. Backend secrets / environment variables
 
-Ustaw w Cloud Run (przez `--set-env-vars` w `infra/deploy.sh` lub Secret Manager, jeśli
-wolisz nie trzymać hasła/tokenu w linii poleceń):
+Set these in Cloud Run (via `--set-env-vars` in `infra/deploy.sh`, or Secret Manager if
+you'd rather not pass the password/token on the command line):
 
-- `JELLITE_USERNAME`, `JELLITE_PASSWORD` — dane logowania jedynego użytkownika.
-- `JELLITE_ACCESS_TOKEN` — statyczny token (np. `openssl rand -hex 32`).
+- `JELLITE_USERNAME`, `JELLITE_PASSWORD` — credentials for the single configured user.
+- `JELLITE_ACCESS_TOKEN` — static bearer token (e.g. `openssl rand -hex 32`).
 
-Domyślne wartości w `backend/.env.example` **nie** są bezpieczne do użycia w produkcji.
+The defaults in `backend/.env.example` are **not** safe to use in production.
 
-## 5. Region i nazwa usługi
+## 5. Region and service name
 
-Domyślnie `infra/deploy.sh` używa regionu `europe-central2` i nazwy usługi `jellite` —
-nadpisz przez zmienne środowiskowe `GCP_REGION` / `SERVICE_NAME`, jeśli potrzeba.
+By default `infra/deploy.sh` uses region `europe-central2` and service name `jellite` —
+override with the `GCP_REGION` / `SERVICE_NAME` environment variables if needed.
 
-## 6. Pierwsze uruchomienie
+## 6. First run
 
 ```bash
-export GCP_PROJECT=jellite
-export RUNTIME_SERVICE_ACCOUNT=jellite-service-account@jellite.iam.gserviceaccount.com
+export GCP_PROJECT=<your-gcp-project>
+export RUNTIME_SERVICE_ACCOUNT=<your-service-account-email>
 
 infra/sync-and-deploy.sh \
-  --library-root /Volumes/music/LOSSLESS \
-  --playlists-dir /Volumes/music/LOSSLESS/playlists \
-  --drive-folder-id 1VO32-V4DGRr2WzG-boZAqo3Wmo9nHh1i \
-  --oauth-token-file /Users/zenedith/git/jellite/.oauth-token.json
+  --library-root /path/to/your/music/library \
+  --playlists-dir /path/to/your/playlists \
+  --drive-folder-id <your-drive-folder-id> \
+  --oauth-token-file /path/to/jellite/.oauth-token.json
 ```
 
-(`--key-file` nie jest już potrzebny do uploadu — patrz sekcja 3/3a. Klucz service accounta
-nadal służy tylko do odczytu/streamowania w backendzie w Cloud Run.)
+(`--key-file` is not needed for uploads — see sections 3/3a. The service account key is
+only used for read/streaming access by the backend on Cloud Run.)

@@ -23,3 +23,8 @@ client_secret*.json
 # data/jellite.sqlite once checkpointed, so they must never be committed.
 data/jellite.sqlite-wal
 data/jellite.sqlite-shm
+
+# The library database itself is specific to your own music collection and is not
+# committed in this public repo — generate your own with `npm run sync` (see
+# data/README.md). Remove this line in a private fork if you want to commit it.
+data/jellite.sqlite

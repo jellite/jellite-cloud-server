@@ -1,70 +1,69 @@
-# Jellite — Specyfikacja projektu
+# Jellite — Project Specification
 
-Status: **draft v0.1** (do dalszej iteracji)
+Status: **draft v0.1** (subject to further iteration)
 
-## 1. Przegląd i cele
+## 1. Overview and goals
 
-Jellite to serwer muzyczny **kompatybilny z podzbiorem API Jellyfin**, przeznaczony do
-uruchomienia w chmurze (Google Cloud Run) i obsługi klientów typu Finamp. Kluczowe
-wymagania:
+Jellite is a music server **compatible with a subset of the Jellyfin API**, designed to
+run in the cloud (Google Cloud Run) and serve clients such as Finamp. Key requirements:
 
-- **Szybki / responsywny** — pobranie listy playlist, pobranie utworów z playlisty
-  oraz rozpoczęcie odtwarzania mają być natychmiastowe (cel: metadane < ~200 ms,
-  time-to-first-byte audio ograniczony głównie przez Google Drive).
-- **Tylko API — brak GUI.** Jellite nie dostarcza żadnego interfejsu użytkownika (w
-  odróżnieniu np. od pełnego serwera Jellyfin). Rolę klienta/UI pełni zewnętrzna
-  aplikacja (np. Finamp), która rozmawia z Jellite przez Jellyfin API.
-- **Zgodność z Jellyfin API** — tylko minimalny, wystarczający podzbiór (patrz sekcja 4).
-- **Minimalna liczba interakcji z Google Drive** — aby uniknąć dodatkowych kosztów/limitów,
-  metadane i obrazki są w całości wstępnie zsynchronizowane do lokalnej bazy SQLite;
-  Drive jest odpytywane tylko przy faktycznym streamowaniu audio.
-- **Niski koszt utrzymania** — Cloud Run skalowany do zera, brak dodatkowej bazy danych
-  w chmurze (SQLite wbudowane w obraz kontenera), brak dedykowanego reverse proxy.
+- **Fast / responsive** — fetching the playlist list, fetching a playlist's tracks, and
+  starting playback should feel instant (target: metadata < ~200 ms, audio
+  time-to-first-byte bounded mainly by Google Drive).
+- **API only — no GUI.** Jellite provides no user interface (unlike a full Jellyfin
+  server). The client/UI role is played by an external app (e.g. Finamp) that talks to
+  Jellite over the Jellyfin API.
+- **Jellyfin API compatibility** — only the minimal subset needed (see section 4).
+- **Minimal Google Drive interaction** — to avoid extra cost/quota issues, all metadata
+  and images are fully pre-synced into a local SQLite database; Drive is only queried
+  when actually streaming audio.
+- **Low maintenance cost** — Cloud Run scaled to zero, no additional cloud database
+  (SQLite baked into the container image), no dedicated reverse proxy.
 
-## 2. Poza zakresem (non-goals)
+## 2. Non-goals
 
-- Brak GUI / web playera.
-- Brak transkodowania audio (bezpośredni passthrough FLAC/M4A).
-- Brak wsparcia dla wielu użytkowników — jeden, statycznie skonfigurowany użytkownik.
-- Brak edycji biblioteki/playlist przez API (tylko odczyt — biblioteka jest zarządzana
-  wyłącznie przez skrypt synchronizacyjny uruchamiany lokalnie).
-- Brak "live" skanowania biblioteki przez backend w chmurze — źródłem prawdy o
-  bibliotece i playlistach są lokalne pliki (`.sorted` + `.m3u`) przetwarzane offline.
-- Brak automatycznego usuwania z Google Drive utworów, które zniknęły z lokalnej
-  biblioteki/playlist (tylko logowanie ostrzeżenia — usuwanie ręczne).
+- No GUI / web player.
+- No audio transcoding (direct FLAC/M4A passthrough).
+- No multi-user support — a single, statically configured user.
+- No library/playlist editing via the API (read-only — the library is managed entirely
+  by the sync script, run locally).
+- No "live" library scanning by the cloud backend — the source of truth for the library
+  and playlists is local files (`.m3u`) processed offline.
+- No automatic removal from Google Drive of tracks that disappeared from the local
+  library/playlists (only a warning is logged — removal is manual).
 
-## 3. Model danych (SQLite)
+## 3. Data model (SQLite)
 
-Baza jest generowana/aktualizowana wyłącznie przez skrypt synchronizacyjny (offline,
-lokalnie) i wbudowywana w obraz kontenera backendu przy każdym deployu. Backend w
-chmurze otwiera ją w trybie **tylko do odczytu**.
+The database is generated/updated exclusively by the sync script (offline, locally) and
+baked into the backend container image on every deploy. The cloud backend opens it in
+**read-only** mode.
 
 ```sql
--- Utwory
+-- Tracks
 CREATE TABLE tracks (
-  id              TEXT PRIMARY KEY,       -- stabilny identyfikator (np. hash ze ścieżki względnej)
-  relative_path   TEXT NOT NULL UNIQUE,   -- ścieżka względna w bibliotece lokalnej
-  drive_file_id   TEXT NOT NULL,          -- ID pliku na Google Drive
+  id              TEXT PRIMARY KEY,       -- stable identifier (e.g. hash of relative path)
+  relative_path   TEXT NOT NULL UNIQUE,   -- path relative to the local library root
+  drive_file_id   TEXT NOT NULL,          -- Google Drive file ID
   title           TEXT,
   artist          TEXT,
   album           TEXT,
   duration_ms     INTEGER,
   container       TEXT,                  -- 'flac' | 'm4a'
-  file_size       INTEGER,                -- do wykrywania nowych/zmienionych plików
-  cover_thumbnail BLOB,                   -- miniatura okładki (JPEG), wyekstrahowana z tagów
+  file_size       INTEGER,                -- used to detect new/changed files
+  cover_thumbnail BLOB,                   -- cover art thumbnail (JPEG), extracted from tags
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL
 );
 
--- Playlisty (źródło: pliki .m3u)
+-- Playlists (source: .m3u files)
 CREATE TABLE playlists (
-  id         TEXT PRIMARY KEY,   -- slug z nazwy pliku .m3u
-  name       TEXT NOT NULL,      -- oryginalna nazwa pliku (bez rozszerzenia)
+  id         TEXT PRIMARY KEY,   -- slug derived from the .m3u file name
+  name       TEXT NOT NULL,      -- original file name (without extension)
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
--- Powiązanie utwór <-> playlista z zachowaniem kolejności
+-- Track <-> playlist association, preserving order
 CREATE TABLE playlist_tracks (
   playlist_id TEXT NOT NULL REFERENCES playlists(id),
   track_id    TEXT NOT NULL REFERENCES tracks(id),
@@ -72,159 +71,152 @@ CREATE TABLE playlist_tracks (
   PRIMARY KEY (playlist_id, position)
 );
 
--- Pojedynczy, statycznie skonfigurowany użytkownik
+-- Single, statically configured user
 CREATE TABLE users (
   id       TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
-  -- hasło/token pochodzą z env vars backendu, tabela służy tylko do zwrócenia
-  -- poprawnego kształtu obiektu User w odpowiedziach Jellyfin API
+  -- password/token come from the backend's env vars; this table only exists to
+  -- return a correctly-shaped User object in Jellyfin API responses
   jellyfin_user_id TEXT NOT NULL UNIQUE
 );
 ```
 
-Uwagi:
-- Obraz playlisty (dla widoku listy playlist) = okładka pierwszego utworu w playliście
-  (fallback: brak obrazka).
-- `id` utworu/playlisty powinno być deterministyczne (np. `sha1(relative_path)` /
-  `slug(nazwa_pliku)`), aby powtórne synchronizacje nie zmieniały identyfikatorów
-  używanych przez klienta (np. w historii odtwarzania).
+Notes:
+- The playlist image (for the playlist list view) is the cover of the playlist's first
+  track (fallback: no image).
+- Track/playlist `id`s should be deterministic (e.g. `sha1(relative_path)` /
+  `slug(file_name)`), so repeated syncs don't change identifiers used by the client
+  (e.g. in playback history).
 
-## 4. Podzbiór Jellyfin API do zaimplementowania
+## 4. Jellyfin API subset to implement
 
-Backend implementuje tylko poniższe endpointy, w zakresie wystarczającym dla klientów
-typu Finamp. Dokładny kształt JSON zostanie zweryfikowany/dopracowany w fazie
-implementacji backendu (Jellyfin API jest częściowo nieudokumentowane, klienci są
-tolerancyjne na brakujące pola, ale kluczowe pola muszą być obecne).
+The backend implements only the endpoints below, sufficient for clients such as Finamp.
+The exact JSON shape is verified/refined during backend implementation (the Jellyfin API
+is partially undocumented; clients tolerate missing fields, but key fields must be
+present).
 
-| Endpoint | Metoda | Opis |
+| Endpoint | Method | Description |
 |---|---|---|
-| `/Users/AuthenticateByName` | POST | Logowanie; porównanie z hardcoded/env user+hasło; zwraca statyczny `AccessToken` + obiekt `User`. |
-| `/System/Info/Public` | GET | Identyfikacja serwera (nazwa, wersja, Id) — używane przez klienta do wykrycia typu serwera. |
-| `/Users/{userId}` | GET | Dane zalogowanego (jedynego) użytkownika. |
-| `/Users/{userId}/Views` lub `/Items?includeItemTypes=Playlist` | GET | Lista playlist jako kolekcja `BaseItemDto` (typ `Playlist`). |
-| `/Playlists/{id}/Items` | GET | Lista utworów playlisty w kolejności, z polami wymaganymi do odtwarzania (Id, Name, Artists, Album, RunTimeTicks, indeks). |
-| `/Items/{id}/Images/Primary` | GET | Zwraca obrazek (z `cover_thumbnail` BLOB w SQLite) z nagłówkami `Cache-Control`/`ETag`. |
-| `/Audio/{id}/stream` (lub `/Audio/{id}/universal`) | GET | Strumieniowanie bajtów audio — proxy z Google Drive (`files.get?alt=media`), z pełnym wsparciem nagłówka `Range` (seek), przekazywanym 1:1 do Drive i z powrotem do klienta. |
+| `/Users/AuthenticateByName` | POST | Login; compared against a hardcoded/env user+password; returns a static `AccessToken` + `User` object. |
+| `/System/Info/Public` | GET | Server identification (name, version, Id) — used by the client to detect the server type. |
+| `/Users/{userId}` | GET | The logged-in (single) user's data. |
+| `/Users/{userId}/Views` or `/Items?includeItemTypes=Playlist` | GET | List of playlists as a `BaseItemDto` collection (type `Playlist`). |
+| `/Playlists/{id}/Items` | GET | Ordered list of a playlist's tracks, with fields required for playback (Id, Name, Artists, Album, RunTimeTicks, index). |
+| `/Items/{id}/Images/Primary` | GET | Returns the image (from the SQLite `cover_thumbnail` BLOB) with `Cache-Control`/`ETag` headers. |
+| `/Audio/{id}/stream` (or `/Audio/{id}/universal`) | GET | Streams audio bytes — proxied from Google Drive (`files.get?alt=media`), with full `Range` header support (seek), passed through 1:1 to Drive and back to the client. |
 
-Autoryzacja: wszystkie endpointy poza `AuthenticateByName` i `System/Info/Public`
-wymagają nagłówka `X-Emby-Token` / `X-MediaBrowser-Token` zgodnego ze statycznym
-tokenem wygenerowanym przy starcie/konfiguracji backendu.
+Authorization: all endpoints except `AuthenticateByName` and `System/Info/Public`
+require an `X-Emby-Token` / `X-MediaBrowser-Token` header matching the static token
+generated when the backend is configured.
 
-Wsparcie dla wyboru momentu odtworzenia utworu (seek) realizowane jest **wyłącznie**
-przez standardowe żądania HTTP `Range` na endpoint streamingu — nie jest potrzebny
-osobny endpoint API do tego celu.
+Seek support is implemented **exclusively** via standard HTTP `Range` requests on the
+streaming endpoint — no separate API endpoint is needed for this.
 
-## 5. Przepływ synchronizacji (sync script)
+## 5. Sync flow (sync script)
 
-Skrypt uruchamiany **lokalnie** (nie w chmurze), z dostępem do lokalnej biblioteki
-muzycznej i lokalnej kopii pliku SQLite. Wejścia:
+The script runs **locally** (not in the cloud), with access to the local music library
+and a local copy of the SQLite file. Inputs:
 
-1. Ścieżka do katalogu z playlistami `.m3u` (nazwa pliku = nazwa playlisty, linie =
-   ścieżki względne do utworów — względem katalogu playlist, w kolejności odtwarzania).
-2. Ścieżka do katalogu-korzenia lokalnej biblioteki (do rozwiązywania ścieżek
-   względnych na pliki fizyczne oraz do zapisu `relative_path` w bazie).
-3. Ścieżka do lokalnego pliku bazy SQLite (tworzona, jeśli nie istnieje).
+1. Path to the `.m3u` playlists directory (file name = playlist name, lines = paths to
+   tracks relative to the playlists directory, in playback order).
+2. Path to the local library root directory (used to resolve relative paths to physical
+   files and to store `relative_path` in the database).
+3. Path to the local SQLite database file (created if it doesn't exist).
 
-Nie ma osobnej "master listy" — zbiór utworów do zsynchronizowania to **suma wszystkich
-ścieżek występujących na jakiejkolwiek playliście `.m3u`**. Pliki obecne w bibliotece,
-ale nienależące do żadnej playlisty, są całkowicie pomijane (nigdy nie skanujemy całego
-katalogu biblioteki).
+There is no separate "master list" — the set of tracks to sync is **the union of every
+path referenced by any `.m3u` playlist**. Files present in the library but not part of
+any playlist are entirely skipped (the library root is never scanned wholesale).
 
-Kroki:
+Steps:
 
-1. **Zebranie ścieżek** — parsowanie wszystkich plików `.m3u` w katalogu playlist,
-   zsumowanie unikalnych ścieżek utworów (znormalizowanych względem korzenia
-   biblioteki).
-2. **Diff nowych plików** — porównanie zebranych ścieżek z `relative_path` już
-   obecnymi w tabeli `tracks` (dopasowanie dodatkowo po `file_size`, aby wykryć
-   zmienione pliki).
-3. **Dla każdego nowego/zmienionego pliku**:
-   - odczyt tagów (artist/title/album/duration) i osadzonej okładki,
-   - wygenerowanie miniatury okładki (zmniejszenie do rozsądnego rozmiaru, JPEG),
-   - upload surowego pliku audio na Google Drive (przez OAuth2, patrz sekcja 6) (jeśli jeszcze nie wgrany),
-   - zapis/aktualizacja rekordu w `tracks` (w tym `drive_file_id`).
-4. **Przebudowa playlist** — dla każdego pliku `.m3u`: upsert rekordu w `playlists`,
-   usunięcie starych wpisów w `playlist_tracks` dla tej playlisty i wstawienie na
-   nowo w aktualnej kolejności (dopasowanie utworów po `relative_path`).
-5. **Wykrywanie osieroconych utworów** — utwory obecne w bazie, ale nieobecne już na
-   żadnej playliście: **tylko log ostrzeżenia** (bez automatycznego usuwania z
-   Drive/bazy w v1).
-6. **Deploy** — wywołanie skryptu deployu, który buduje obraz kontenera backendu z
-   aktualnym plikiem SQLite wbudowanym w obraz i wdraża go na Cloud Run
+1. **Collect paths** — parse every `.m3u` file in the playlists directory, collect the
+   unique set of track paths (normalized relative to the library root).
+2. **Diff new files** — compare the collected paths against `relative_path` values
+   already present in the `tracks` table (also matched by `file_size` to detect changed
+   files).
+3. **For each new/changed file**:
+   - read tags (artist/title/album/duration) and the embedded cover art,
+   - generate a cover thumbnail (resized to a reasonable size, JPEG),
+   - upload the raw audio file to Google Drive (via OAuth2, see section 6), if not
+     already uploaded,
+   - insert/update the corresponding `tracks` row (including `drive_file_id`).
+4. **Rebuild playlists** — for each `.m3u` file: upsert the `playlists` row, delete
+   existing `playlist_tracks` entries for that playlist, and re-insert them in the
+   current order (tracks matched by `relative_path`).
+5. **Detect orphaned tracks** — tracks present in the database but no longer referenced
+   by any playlist: **only a warning is logged** (no automatic removal from Drive/DB in
+   v1).
+6. **Deploy** — invoke the deploy script, which builds the backend container image with
+   the current SQLite file baked in and deploys it to Cloud Run
    (`gcloud run deploy --source ...`).
 
-Skrypt musi być **idempotentny** — wielokrotne uruchomienie bez zmian w bibliotece
-nie powinno wywoływać żadnych uploadów ani zbędnego deployu (lub deploy powinien być
-pomijany, jeśli baza się nie zmieniła).
+The script must be **idempotent** — running it repeatedly with no library changes
+should trigger no uploads and no unnecessary deploy (or the deploy should be skipped if
+the database didn't change).
 
-## 6. Infrastruktura / wdrożenie
+## 6. Infrastructure / deployment
 
-- **Przechowywanie audio**: Google Drive. Pierwotnie zakładano Współdzielony dysk
-  (Shared Drive) w ramach Google Workspace, ale weryfikacja z realnymi danymi
-  wykazała, że konto użytkownika **nie jest** kontem Workspace — jest to zwykły
-  folder na "Moim dysku" udostępniony service accountowi. Service account ma
-  zawsze 0 GB własnego miejsca (potwierdzone empirycznie: próba uploadu zwróciła
-  `storageQuotaExceeded`), więc **upload realizowany jest przez OAuth2 jako
-  właściciel folderu** (jednorazowa autoryzacja, patrz `infra/setup-gcp.md`
-  sekcja 3a i `sync/README.md`), a nie przez service account. Odczyt/streamowanie
-  w backendzie nadal korzysta z service accounta, ponieważ folder jest z nim
-  udostępniony do odczytu — to działa bez OAuth.
-- **Backend**: Node.js + TypeScript + Express, kontener wdrażany na **Google Cloud
-  Run**. Skaluje się do zera przy braku ruchu → brak kosztu w spoczynku.
-- **Baza danych**: SQLite, **wbudowana w obraz kontenera** podczas deployu (nie ma
-  zdalnej/hostowanej bazy danych, nie ma dodatkowych kosztów ani wymogu utrzymania
-  połączenia). Backend otwiera plik w trybie tylko-do-odczytu.
-- **Reverse proxy / logging**: brak dedykowanego komponentu (np. nginx) — wbudowane
-  logowanie żądań Cloud Run (Cloud Logging) jest wystarczające, ponieważ jedyną rolą
-  nginx na obecnym serwerze jellyfin jest optymalizacja ruchu, co nie jest wymagane
-  w tym projekcie.
-- **Uwierzytelnienie backendu wobec Google Drive**: Cloud Run może mieć przypisaną
-  service account jako tożsamość uruchomieniową (runtime identity) — backend
-  korzysta wtedy z Application Default Credentials, **bez potrzeby przechowywania
-  pliku klucza JSON w obrazie/secretach**. Wystarcza to do odczytu/streamowania.
-- **Uwierzytelnienie skryptu sync (lokalnie)**: do **uploadu** nowych plików skrypt
-  sync używa OAuth2 (konto właściciela folderu, jednorazowa autoryzacja z zapisanym
-  lokalnie refresh tokenem — patrz `sync/README.md`), a nie klucza service accounta.
-  Deploy z lokalnej maszyny wymaga standardowego `gcloud auth login` użytkownika
-  (z uprawnieniami do Cloud Run/Cloud Build w danym projekcie GCP).
-- **Sekrety**: hasło/token statycznego użytkownika, klucz service accounta oraz
-  token OAuth2 przechowywane lokalnie/jako zmienne środowiskowe Cloud Run lub Google
-  Secret Manager — nigdy w repozytorium git.
+- **Audio storage**: Google Drive. A Shared Drive under Google Workspace was originally
+  assumed, but real-world testing showed that a regular Google account is **not** a
+  Workspace account — it's a regular folder in "My Drive" shared with the service
+  account. Service accounts always have 0 GB of their own storage (confirmed
+  empirically: an upload attempt returned `storageQuotaExceeded`), so **uploads are done
+  via OAuth2 as the folder owner** (one-time authorization, see `infra/setup-gcp.md`
+  section 3a and `sync/README.md`), not the service account. Read/streaming in the
+  backend still uses the service account, since the folder is shared with it for
+  read access — that works without OAuth.
+- **Backend**: Node.js + TypeScript + Express, deployed as a container on **Google Cloud
+  Run**. Scales to zero when idle → no cost at rest.
+- **Database**: SQLite, **baked into the container image** at deploy time (no
+  remote/hosted database, no extra cost or connection-management requirement). The
+  backend opens the file in read-only mode.
+- **Reverse proxy / logging**: no dedicated component (e.g. nginx) — Cloud Run's built-in
+  request logging (Cloud Logging) is sufficient.
+- **Backend authentication to Google Drive**: Cloud Run can have a service account
+  attached as its runtime identity — the backend then uses Application Default
+  Credentials, **without needing to store a JSON key file** in the image/secrets. This
+  is sufficient for read/streaming.
+- **Sync script authentication (locally)**: to **upload** new files, the sync script
+  uses OAuth2 (the folder owner's account, one-time authorization with a locally saved
+  refresh token — see `sync/README.md`), not a service account key. Deploying from a
+  local machine requires standard user `gcloud auth login` (with Cloud Run/Cloud Build
+  permissions on the target GCP project).
+- **Secrets**: the static user's password/token, the service account key, and the OAuth2
+  token are stored locally / as Cloud Run environment variables or Google Secret
+  Manager — never in the git repository.
 
-## 7. Wymagania niefunkcjonalne
+## 7. Non-functional requirements
 
-- **Wydajność**: odpowiedzi na zapytania o metadane (lista playlist, lista utworów,
-  obrazki) oparte wyłącznie o indeksowane zapytania SQLite — cel < ~200 ms. Streaming
-  audio ograniczony głównie przepustowością i czasem odpowiedzi Google Drive, nie
-  logiką backendu.
-- **Koszt**: Cloud Run scale-to-zero (brak kosztu w spoczynku), brak Cloud SQL/innej
-  hostowanej bazy, minimalne wywołania Drive API (tylko streaming + pojedyncze
-  uploady podczas syncu — nie przy każdym żądaniu klienta).
-- **Bezpieczeństwo**: pojedynczy statyczny token/hasło (odpowiednik "hardcoded"
-  usera), brak możliwości zapisu/modyfikacji danych przez API, brak publicznego
-  dostępu do Google Drive (tylko przez backend).
-- **Idempotencja/powtarzalność**: skrypt sync i deploy mogą być uruchamiane
-  wielokrotnie bez efektów ubocznych przy braku zmian.
+- **Performance**: metadata queries (playlist list, track list, images) rely solely on
+  indexed SQLite queries — target < ~200 ms. Audio streaming is bounded mainly by Google
+  Drive's bandwidth and response time, not backend logic.
+- **Cost**: Cloud Run scale-to-zero (no cost at rest), no Cloud SQL / other hosted
+  database, minimal Drive API calls (only streaming + individual uploads during sync —
+  not on every client request).
+- **Security**: a single static token/password (a "hardcoded" user), no ability to
+  write/modify data via the API, no public access to Google Drive (only through the
+  backend).
+- **Idempotency/repeatability**: the sync and deploy scripts can be run repeatedly with
+  no side effects when nothing has changed.
 
-## 8. Otwarte pytania / założenia do potwierdzenia w kolejnych fazach
+## 8. Open questions / assumptions to confirm in later phases
 
-- Dokładny kształt JSON wymagany przez konkretną wersję klienta Finamp — do
-  zweryfikowania empirycznie podczas implementacji backendu (może wymagać dodatkowych
-  pól nieopisanych tutaj).
-- Format identyfikatora `id` utworu/playlisty (`sha1` ścieżki względnej dla utworu,
-  slug nazwy pliku `.m3u` dla playlisty) — **potwierdzony realnym testem** (upload
-  pojedynczego utworu z prawdziwej biblioteki, patrz `sync/README.md`); nie zmieniać
-  algorytmu po pierwszej pełnej synchronizacji, bo unieważni to historię odtwarzania
-  klienta.
-- Docelowy rozmiar miniatury okładki (np. 300x300 JPEG) — do ustalenia z uwagi na
-  rozmiar pliku SQLite wbudowywanego w obraz kontenera.
-- Polityka wersjonowania/nazewnictwa usługi Cloud Run oraz regionu GCP.
+- The exact JSON shape required by a given Finamp client version — to be verified
+  empirically during backend implementation (may require additional fields not
+  described here).
+- The format of track/playlist `id`s (`sha1` of the relative path for tracks, slug of
+  the `.m3u` file name for playlists) — confirmed by a real test (uploading a single
+  track from a real library, see `sync/README.md`); do not change the algorithm after
+  the first full sync, as it would invalidate the client's playback history.
+- Target cover thumbnail size (e.g. 300x300 JPEG) — to be decided based on the resulting
+  SQLite file size baked into the container image.
+- Versioning/naming policy for the Cloud Run service and the GCP region.
 
-## 9. Kolejne fazy (poza zakresem tego dokumentu)
+## 9. Next phases (out of scope for this document)
 
-1. Implementacja backendu (Express + SQLite + Drive proxy).
-2. Implementacja skryptu synchronizacyjnego (parsowanie `.m3u`, ekstrakcja
-   tagów/okładek, upload Drive, przebudowa SQLite).
-3. Implementacja skryptów infrastruktury (Dockerfile, `gcloud run deploy`, konfiguracja
-   Google Drive (OAuth2 do uploadu + service account do odczytu)).
-4. Testy end-to-end z rzeczywistym klientem Finamp.
+1. Backend implementation (Express + SQLite + Drive proxy).
+2. Sync script implementation (`.m3u` parsing, tag/cover extraction, Drive upload,
+   SQLite rebuild).
+3. Infrastructure scripts implementation (Dockerfile, `gcloud run deploy`, Google Drive
+   configuration — OAuth2 for uploads + service account for reads).
+4. End-to-end tests with a real Finamp client.
