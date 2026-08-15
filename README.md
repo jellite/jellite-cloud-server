@@ -59,5 +59,8 @@ npm run unraid-sync   # biblioteka na serwerze Unraid: /mnt/user/music/LOSSLESS
 ```
 
 ```bash
-cd /Users/zenedith/git/jellite && export GCP_PROJECT=jellite && export RUNTIME_SERVICE_ACCOUNT=jellite-service-account@jellite.iam.gserviceaccount.com && export JELLITE_USERNAME=admin && export JELLITE_PASSWORD='REDACTED-ROTATED-PASSWORD' && export JELLITE_ACCESS_TOKEN='REDACTED-ROTATED-TOKEN' && bash infra/deploy.sh 2>&1
+export GCP_PROJECT=jellite && export RUNTIME_SERVICE_ACCOUNT=jellite-service-account@jellite.iam.gserviceaccount.com && export JELLITE_USERNAME=admin && export JELLITE_PASSWORD="$(openssl rand -hex 12)" && export JELLITE_ACCESS_TOKEN="$(openssl rand -hex 32)" && bash infra/deploy.sh 2>&1
 ```
+
+`infra/deploy.sh` prints the generated `JELLITE_PASSWORD`/`JELLITE_ACCESS_TOKEN` once at the
+end — save them from a password manager, never commit real values into this file.
