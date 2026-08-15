@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { getPlaylist, getPlaylistPrimaryTrack, getTrack, getTrackByAlbumOrArtistStableId } from "../db.js";
-import { stableId } from "../jellyfinShapes.js";
+import { getPlaylistByExternalId, getPlaylistPrimaryTrack, getPlaylists, getTrack, getTrackByAlbumOrArtistStableId } from "../db.js";
+import { externalPlaylistId, MUSIC_LIBRARY_ID, stableId } from "../jellyfinShapes.js";
 
 export const imagesRouter = Router();
 // No requireAuth here: real Jellyfin serves item images without a token, and clients
@@ -27,10 +27,22 @@ imagesRouter.get("/Items/:id/Images/Primary", (req, res) => {
   }
 
   // Playlist cover art = cover of its first track (see SPEC.md), resolved on demand so we
-  // don't need to duplicate image bytes per playlist in the DB.
-  const playlist = getPlaylist(req.params.id);
+  // don't need to duplicate image bytes per playlist in the DB. Playlist ids exposed to
+  // clients are MD5 hashes of the real slug (see jellyfinShapes.ts externalPlaylistId),
+  // so reverse-resolve before looking it up.
+  const playlist = getPlaylistByExternalId(externalPlaylistId, req.params.id);
   if (playlist) {
     const firstTrack = getPlaylistPrimaryTrack(playlist.id);
+    sendCover(res, firstTrack?.cover_thumbnail);
+    return;
+  }
+
+  // The fake "Music" library itself (see musicLibraryItem()) has no cover of its own —
+  // fall back to the first playlist's cover so clients like jellyfin-vue don't just show
+  // a broken image/404 for the library tile.
+  if (req.params.id === MUSIC_LIBRARY_ID) {
+    const firstPlaylist = getPlaylists()[0];
+    const firstTrack = firstPlaylist ? getPlaylistPrimaryTrack(firstPlaylist.id) : undefined;
     sendCover(res, firstTrack?.cover_thumbnail);
     return;
   }

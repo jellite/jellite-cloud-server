@@ -26,7 +26,19 @@ export function stableId(value: string): string {
  * (see finamp's view_selector.dart) — so Jellite fakes a single "Music" library here.
  * Playlists themselves are then fetched via `/Items` with this as the parentId.
  */
-export const MUSIC_LIBRARY_ID = "music-library";
+// jellyfin-vue's router guards reject any itemId route param that isn't a 32-char hex
+// string (looks like it expects an MD5 hash, see validate.ts's `/[\da-f]{32}/i` check) —
+// a plain slug like "music-library" fails validation client-side before any request is
+// even sent, surfacing as "The specified parameters for accessing this page are not
+// correct" the moment the user clicks into the library. Use an MD5-shaped id instead.
+export const MUSIC_LIBRARY_ID = createHash("md5").update("jellite-music-library").digest("hex");
+
+// Playlist ids in the DB are human-readable slugs (e.g. "deezer"), which fail the same
+// jellyfin-vue route validation as above — expose an MD5-hashed id to clients instead.
+// Routes resolve this back to the real playlist via db.ts's getPlaylistByExternalId().
+export function externalPlaylistId(id: string): string {
+  return createHash("md5").update(id).digest("hex");
+}
 
 export function musicLibraryItem() {
   return {
@@ -40,13 +52,13 @@ export function musicLibraryItem() {
 
 export function playlistToItem(playlist: PlaylistRow, trackCount: number) {
   return {
-    Id: playlist.id,
+    Id: externalPlaylistId(playlist.id),
     Name: playlist.name,
     Type: "Playlist",
     MediaType: "Audio",
     IsFolder: true,
     ChildCount: trackCount,
-    ImageTags: { Primary: playlist.id },
+    ImageTags: { Primary: externalPlaylistId(playlist.id) },
     // Playlist cover is served as the first track's thumbnail (see images.ts), which is
     // always 300x300 (verified earlier), so this is accurate, not just a hardcoded guess.
     // Missing this field is what causes the white bar Finamp renders above the playlist

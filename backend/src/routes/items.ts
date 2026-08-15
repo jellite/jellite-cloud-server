@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../auth.js";
-import { getPlaylist, getPlaylistTracks, getPlaylists, getTrack } from "../db.js";
-import { musicLibraryItem, playlistToItem, trackToItem } from "../jellyfinShapes.js";
+import { getPlaylistByExternalId, getPlaylistTracks, getPlaylists, getTrack } from "../db.js";
+import { externalPlaylistId, musicLibraryItem, playlistToItem, trackToItem } from "../jellyfinShapes.js";
 
 export const itemsRouter = Router();
 itemsRouter.use(requireAuth);
@@ -71,7 +71,7 @@ itemsRouter.get("/UserItems/Resume", (_req, res) => {
 itemsRouter.get("/Users/:userId/Items/:itemId", (req, res) => {
   const { itemId } = req.params;
 
-  const playlist = getPlaylist(itemId);
+  const playlist = getPlaylistByExternalId(externalPlaylistId, itemId);
   if (playlist) {
     res.json(playlistToItem(playlist, getPlaylistTracks(playlist.id).length));
     return;

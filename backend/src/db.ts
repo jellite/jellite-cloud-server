@@ -81,3 +81,17 @@ export function getTrackByAlbumOrArtistStableId(
   }
   return undefined;
 }
+
+/**
+ * Playlist ids in the DB are human-readable slugs (e.g. "deezer", "jan"), but
+ * jellyfin-vue's router guard rejects any /library|playlist/{itemId} route param that
+ * isn't a 32-char hex string (see jellyfinShapes.ts MUSIC_LIBRARY_ID comment) — so we
+ * expose an MD5 hash of the slug to clients instead, and reverse-resolve it back to the
+ * real playlist here (cheap: at most a few dozen playlists, see SPEC.md).
+ */
+export function getPlaylistByExternalId(
+  externalId: (id: string) => string,
+  id: string
+): PlaylistRow | undefined {
+  return getPlaylists().find((playlist) => externalId(playlist.id) === id);
+}
