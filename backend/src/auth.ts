@@ -24,7 +24,38 @@ function extractToken(req: Request): string | undefined {
   return typeof queryToken === "string" ? queryToken : undefined;
 }
 
+/**
+ * Some non-Jellyfin-native clients (e.g. foobar2000's mobile app) never call
+ * `AuthenticateByName` and instead probe the server with plain HTTP Basic Auth
+ * (`Authorization: Basic base64(username:password)`), the same credentials configured for
+ * `JELLITE_USERNAME` / `JELLITE_PASSWORD`. Accept that as an alternative to the token check
+ * so such clients can log in without any Jellyfin-specific auth flow.
+ */
+function hasValidBasicAuth(req: Request): boolean {
+  const authHeader = req.header("Authorization");
+  if (!authHeader?.startsWith("Basic ")) return false;
+
+  let decoded: string;
+  try {
+    decoded = Buffer.from(authHeader.slice("Basic ".length), "base64").toString("utf8");
+  } catch {
+    return false;
+  }
+
+  const separatorIndex = decoded.indexOf(":");
+  if (separatorIndex === -1) return false;
+
+  const username = decoded.slice(0, separatorIndex);
+  const password = decoded.slice(separatorIndex + 1);
+  return username === config.username && password === config.password;
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  if (hasValidBasicAuth(req)) {
+    next();
+    return;
+  }
+
   const token = extractToken(req);
   if (!token || token !== config.accessToken) {
     res.status(401).json({ error: "Unauthorized" });

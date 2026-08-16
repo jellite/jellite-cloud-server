@@ -4,6 +4,14 @@ import { serverInfoPublic } from "../jellyfinShapes.js";
 
 export const systemRouter = Router();
 
+// Some clients (e.g. foobar2000's mobile app) probe the server with a plain
+// `HEAD /` / `GET /` request carrying HTTP Basic Auth credentials before/instead of using the
+// Jellyfin API. Without this route it 404s and such clients treat the server as unreachable.
+// requireAuth() accepts Basic Auth (see auth.ts), so this doubles as a login check for them.
+systemRouter.get("/", requireAuth, (_req, res) => {
+  res.sendStatus(200);
+});
+
 // Unauthenticated: used by Jellyfin clients to discover/identify the server before login.
 systemRouter.get("/System/Info/Public", (_req, res) => {
   res.json(serverInfoPublic());

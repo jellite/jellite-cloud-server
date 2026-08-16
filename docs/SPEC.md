@@ -98,6 +98,7 @@ present).
 | Endpoint | Method | Description |
 |---|---|---|
 | `/Users/AuthenticateByName` | POST | Login; compared against a hardcoded/env user+password; returns a static `AccessToken` + `User` object. |
+| `/` | GET/HEAD | Not part of the Jellyfin API — a "ping + login" endpoint for clients (e.g. foobar2000-mobile) that probe the server root with `Authorization: Basic` instead of calling `AuthenticateByName`. Returns `200 OK` with no body, protected by `requireAuth` (see below). |
 | `/System/Info/Public` | GET | Server identification (name, version, Id) — used by the client to detect the server type. |
 | `/Users/{userId}` | GET | The logged-in (single) user's data. |
 | `/Users/{userId}/Views` or `/Items?includeItemTypes=Playlist` | GET | List of playlists as a `BaseItemDto` collection (type `Playlist`). |
@@ -108,6 +109,15 @@ present).
 Authorization: all endpoints except `AuthenticateByName` and `System/Info/Public`
 require an `X-Emby-Token` / `X-MediaBrowser-Token` header matching the static token
 generated when the backend is configured.
+
+Additionally, as an alternative to the token above, `requireAuth` accepts the standard
+`Authorization: Basic base64(username:password)` header compared directly against the
+static `JELLITE_USERNAME`/`JELLITE_PASSWORD` — some clients (e.g. the foobar2000 mobile
+app) never call `AuthenticateByName` at all, instead probing the server directly with
+Basic Auth requests (e.g. `HEAD /`). For such clients a `GET /` endpoint (and thus
+implicitly `HEAD /`) is also exposed, protected by `requireAuth`, returning `200 OK` with
+no body — it serves purely as a "ping + login check" and is not part of the actual
+Jellyfin API.
 
 Seek support is implemented **exclusively** via standard HTTP `Range` requests on the
 streaming endpoint — no separate API endpoint is needed for this.
