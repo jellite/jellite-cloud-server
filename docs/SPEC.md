@@ -99,6 +99,7 @@ present).
 |---|---|---|
 | `/Users/AuthenticateByName` | POST | Login; compared against a hardcoded/env user+password; returns a static `AccessToken` + `User` object. |
 | `/` | GET/HEAD | Not part of the Jellyfin API — a "ping + login" endpoint for clients (e.g. foobar2000-mobile) that probe the server root with `Authorization: Basic` instead of calling `AuthenticateByName`. Returns `200 OK` with no body, protected by `requireAuth` (see below). |
+| `/` | PROPFIND | Not part of the Jellyfin API — foobar2000-mobile additionally probes the root with a WebDAV `PROPFIND` (Depth: 0) request before trying `AuthenticateByName`. Returns a minimal, valid `multistatus` document (207) describing `/` as a collection, protected by `requireAuth`, instead of 404. |
 | `/System/Info/Public` | GET | Server identification (name, version, Id) — used by the client to detect the server type. |
 | `/Users/{userId}` | GET | The logged-in (single) user's data. |
 | `/Users/{userId}/Views` or `/Items?includeItemTypes=Playlist` | GET | List of playlists as a `BaseItemDto` collection (type `Playlist`). |
