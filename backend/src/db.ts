@@ -12,6 +12,7 @@ export interface TrackRow {
   container: string | null;
   file_size: number | null;
   cover_thumbnail: Buffer | null;
+  cover_object?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +29,32 @@ export interface PlaylistRow {
 export const db = new Database(config.dbPath, { readonly: true, fileMustExist: true });
 db.pragma("journal_mode = WAL");
 
+const trackColumns = db.pragma("table_info(tracks)") as { name: string }[];
+const hasCoverObjectColumn = trackColumns.some((column) => column.name === "cover_object");
+
+function trackProjection(tableAlias = ""): string {
+  if (config.imageHosting !== "gcs") return `${tableAlias}*`;
+
+  // Do not pull legacy JPEG BLOBs into Node when GCS is active. Run export-covers first for
+  // databases created before the cover_object column was added.
+  const column = (name: string) => `${tableAlias}${name}`;
+  return [
+    column("id"),
+    column("relative_path"),
+    column("drive_file_id"),
+    column("title"),
+    column("artist"),
+    column("album"),
+    column("duration_ms"),
+    column("container"),
+    column("file_size"),
+    "NULL AS cover_thumbnail",
+    hasCoverObjectColumn ? column("cover_object") : "NULL AS cover_object",
+    column("created_at"),
+    column("updated_at"),
+  ].join(", ");
+}
+
 export function getPlaylists(): PlaylistRow[] {
   return db.prepare("SELECT * FROM playlists ORDER BY name COLLATE NOCASE").all() as PlaylistRow[];
 }
@@ -39,7 +66,7 @@ export function getPlaylist(id: string): PlaylistRow | undefined {
 export function getPlaylistTracks(playlistId: string): TrackRow[] {
   return db
     .prepare(
-      `SELECT t.* FROM playlist_tracks pt
+      `SELECT ${trackProjection("t.")} FROM playlist_tracks pt
        JOIN tracks t ON t.id = pt.track_id
        WHERE pt.playlist_id = ?
        ORDER BY pt.position ASC`
@@ -50,7 +77,7 @@ export function getPlaylistTracks(playlistId: string): TrackRow[] {
 export function getPlaylistPrimaryTrack(playlistId: string): TrackRow | undefined {
   return db
     .prepare(
-      `SELECT t.* FROM playlist_tracks pt
+      `SELECT ${trackProjection("t.")} FROM playlist_tracks pt
        JOIN tracks t ON t.id = pt.track_id
        WHERE pt.playlist_id = ?
        ORDER BY pt.position ASC
@@ -60,7 +87,7 @@ export function getPlaylistPrimaryTrack(playlistId: string): TrackRow | undefine
 }
 
 export function getTrack(id: string): TrackRow | undefined {
-  return db.prepare("SELECT * FROM tracks WHERE id = ?").get(id) as TrackRow | undefined;
+  return db.prepare(`SELECT ${trackProjection()} FROM tracks WHERE id = ?`).get(id) as TrackRow | undefined;
 }
 
 export interface TrackPathRow {
@@ -101,7 +128,10 @@ export function getTrackByAlbumOrArtistStableId(
   stableId: (value: string) => string,
   id: string
 ): TrackRow | undefined {
-  const tracks = db.prepare("SELECT * FROM tracks WHERE cover_thumbnail IS NOT NULL").all() as TrackRow[];
+  const coverFilter = config.imageHosting === "gcs"
+    ? (hasCoverObjectColumn ? "cover_object IS NOT NULL" : "0")
+    : "cover_thumbnail IS NOT NULL";
+  const tracks = db.prepare(`SELECT ${trackProjection()} FROM tracks WHERE ${coverFilter}`).all() as TrackRow[];
   for (const track of tracks) {
     if (track.album && stableId(track.album) === id) return track;
     if (track.artist && stableId(track.artist) === id) return track;

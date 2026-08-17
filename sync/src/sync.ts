@@ -13,6 +13,8 @@ import { createOAuthDriveClient, uploadAudioFile } from "./drive.js";
 import { trackId, playlistId } from "./ids.js";
 import { extractMetadata } from "./metadata.js";
 import { parsePlaylistsDir } from "./parseM3u.js";
+import { coverObjectName, createStorage, uploadCover } from "./gcs.js";
+import type { ImageHosting } from "./imageHosting.js";
 
 export interface SyncOptions {
   libraryRoot: string;
@@ -27,6 +29,10 @@ export interface SyncOptions {
   oauthTokenFilePath?: string;
   username: string;
   userId: string;
+  imageHosting: ImageHosting;
+  gcsBucketName?: string;
+  gcsCoversPrefix?: string;
+  googleApplicationCredentials?: string;
   /** Skips Drive uploads (useful for local testing without real GCP credentials). */
   dryRun?: boolean;
 }
@@ -45,6 +51,17 @@ function formatBytes(bytes: number): string {
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function imageStorageMatches(
+  existing: { cover_thumbnail: Buffer | null; cover_object?: string | null } | undefined,
+  imageHosting: ImageHosting
+): boolean {
+  if (!existing) return false;
+
+  // A null/null row means the source file has no embedded cover and is valid in either mode.
+  if (!existing.cover_thumbnail && !existing.cover_object) return true;
+  return imageHosting === "sqlite" ? !existing.cover_object : Boolean(existing.cover_object);
 }
 
 /**
@@ -98,6 +115,12 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
 
   const db = openSyncDb(options.dbPath);
   const drive = options.dryRun ? undefined : await createOAuthDriveClient(options.oauthTokenFilePath!);
+  const storage = options.imageHosting === "gcs" && !options.dryRun
+    ? createStorage(options.googleApplicationCredentials)
+    : undefined;
+  if (options.imageHosting === "gcs" && !options.dryRun && !options.gcsBucketName) {
+    throw new Error("gcsBucketName is required when imageHosting is gcs");
+  }
 
   upsertUser(db, options.username, options.userId);
 
@@ -131,7 +154,7 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
 
     const fileSize = statSync(absolutePath).size;
     const existing = getExistingTrackByPath(db, relativePath);
-    if (existing && existing.file_size === fileSize) {
+    if (existing && existing.file_size === fileSize && imageStorageMatches(existing, options.imageHosting)) {
       unchangedTracks += 1;
       progress.update(index, `up to date (${unchangedTracks} so far)`);
       continue; // unchanged, nothing to do
@@ -140,13 +163,22 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
     const uploadStartedAt = Date.now();
     progress.update(index, `uploading "${basename(absolutePath)}" (${formatBytes(fileSize)})...`, true);
 
-    const metadata = await extractMetadata(absolutePath);
+    const metadata = await extractMetadata(absolutePath, options.imageHosting);
     const driveFileId =
       existing?.drive_file_id ??
       (drive ? await uploadAudioFile(drive, absolutePath, basename(absolutePath), options.driveFolderId) : "DRY_RUN");
+    const id = existing?.id ?? trackId(relativePath);
+    if (storage && options.gcsBucketName && metadata.coverWebp) {
+      await uploadCover(
+        storage,
+        options.gcsBucketName,
+        coverObjectName(id, options.gcsCoversPrefix),
+        metadata.coverWebp
+      );
+    }
 
     upsertTrack(db, {
-      id: existing?.id ?? trackId(relativePath),
+      id,
       relativePath,
       driveFileId,
       title: metadata.title,
@@ -155,7 +187,11 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
       durationMs: metadata.durationMs,
       container: absolutePath.toLowerCase().endsWith(".flac") ? "flac" : "m4a",
       fileSize,
-      coverThumbnail: metadata.coverThumbnail,
+      coverThumbnail: options.imageHosting === "sqlite" ? metadata.coverThumbnail : null,
+      coverObject:
+        options.imageHosting === "gcs" && storage && options.gcsBucketName && metadata.coverWebp
+          ? coverObjectName(id, options.gcsCoversPrefix)
+          : null,
     });
     newTracks += 1;
     existingPaths.add(relativePath);

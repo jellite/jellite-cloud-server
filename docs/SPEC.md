@@ -14,9 +14,9 @@ run in the cloud (Google Cloud Run) and serve clients such as Finamp. Key requir
   server). The client/UI role is played by an external app (e.g. Finamp) that talks to
   Jellite over the Jellyfin API.
 - **Jellyfin API compatibility** — only the minimal subset needed (see section 4).
-- **Minimal Google Drive interaction** — to avoid extra cost/quota issues, all metadata
-  and images are fully pre-synced into a local SQLite database; Drive is only queried
-  when actually streaming audio.
+- **Minimal Google Drive interaction** — to avoid extra cost/quota issues, metadata and
+  cover references are fully pre-synced locally; Drive is only queried when actually
+  streaming audio. Covers may be served from SQLite or public GCS.
 - **Low maintenance cost** — Cloud Run scaled to zero, no additional cloud database
   (SQLite baked into the container image), no dedicated reverse proxy.
 
@@ -50,7 +50,8 @@ CREATE TABLE tracks (
   duration_ms     INTEGER,
   container       TEXT,                  -- 'flac' | 'm4a'
   file_size       INTEGER,                -- used to detect new/changed files
-  cover_thumbnail BLOB,                   -- cover art thumbnail (JPEG), extracted from tags
+  cover_thumbnail BLOB,                   -- JPEG thumbnail in SQLite mode
+  cover_object    TEXT,                   -- WebP object, e.g. covers/<id>.webp, in GCS mode
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL
 );
@@ -88,6 +89,28 @@ Notes:
   `slug(file_name)`), so repeated syncs don't change identifiers used by the client
   (e.g. in playback history).
 
+### 3.1. Cover hosting modes
+
+The hosting mode is selected with `IMAGE_HOSTING` (`sqlite` or `gcs`). The default is `sqlite`
+to preserve compatibility with existing databases and deployments.
+
+- `sqlite`: sync generates a 300x300 JPEG thumbnail and stores it in
+  `tracks.cover_thumbnail`. The backend serves the image directly from SQLite.
+- `gcs`: sync generates a 300x300 WebP thumbnail, uploads it to Google Cloud Storage, and
+  stores the object name in `tracks.cover_object` (by default `covers/<track-id>.webp`). In
+  this mode `cover_thumbnail` is empty and the backend redirects image requests to the
+  public GCS object URL.
+
+`gcs` requires `GCS_BUCKET_NAME`. `GCS_COVERS_PREFIX` changes the object prefix, and
+`GCS_PUBLIC_BASE_URL` can point to a custom public URL or CDN. The bucket must allow public
+object reads because Jellyfin clients fetch images without an API token.
+
+Existing databases can be migrated with `sync`'s `export-covers` command without parsing the
+audio files again. The exporter converts existing JPEG BLOBs to WebP, records `cover_object`,
+and preserves the JPEGs by default so SQLite mode remains usable. The export is resumable:
+rows with a non-empty `cover_object` are skipped; `--overwrite` forces a new upload. After GCS
+has been verified, `--strip-sqlite-covers` removes the old BLOBs and reduces the database size.
+
 ## 4. Jellyfin API subset to implement
 
 The backend implements only the endpoints below, sufficient for clients such as Finamp.
@@ -100,11 +123,12 @@ present).
 | `/Users/AuthenticateByName` | POST | Login; compared against a hardcoded/env user+password; returns a static `AccessToken` + `User` object. |
 | `/` | GET/HEAD | Not part of the Jellyfin API — a "ping + login" endpoint for clients (e.g. foobar2000-mobile) that probe the server root with `Authorization: Basic` instead of calling `AuthenticateByName`. Returns `200 OK` with no body, protected by `requireAuth` (see below). |
 | `/` | PROPFIND | Not part of the Jellyfin API — foobar2000-mobile additionally probes the root with a WebDAV `PROPFIND` (Depth: 0) request before trying `AuthenticateByName`. Returns a minimal, valid `multistatus` document (207) describing `/` as a collection, protected by `requireAuth`, instead of 404. |
+| `/webdav/*` | OPTIONS/PROPFIND/GET/HEAD | Read-only WebDAV access to the library's Artist/Album/Track hierarchy, plus a virtual `playlists/` directory containing generated `.m3u` files built from the SQLite playlist tables. Audio files are streamed from Google Drive; playlist files are generated dynamically. `OPTIONS` is unauthenticated for capability discovery, other methods require auth, and `PROPFIND Depth: infinity` is rejected with 403. |
 | `/System/Info/Public` | GET | Server identification (name, version, Id) — used by the client to detect the server type. |
 | `/Users/{userId}` | GET | The logged-in (single) user's data. |
 | `/Users/{userId}/Views` or `/Items?includeItemTypes=Playlist` | GET | List of playlists as a `BaseItemDto` collection (type `Playlist`). |
 | `/Playlists/{id}/Items` | GET | Ordered list of a playlist's tracks, with fields required for playback (Id, Name, Artists, Album, RunTimeTicks, index). |
-| `/Items/{id}/Images/Primary` | GET | Returns the image (from the SQLite `cover_thumbnail` BLOB) with `Cache-Control`/`ETag` headers. |
+| `/Items/{id}/Images/Primary` | GET | Serves the image from SQLite or redirects to a public WebP object in GCS, depending on `IMAGE_HOSTING`. |
 | `/Audio/{id}/stream` (or `/Audio/{id}/universal`) | GET | Streams audio bytes — proxied from Google Drive (`files.get?alt=media`), with full `Range` header support (seek), passed through 1:1 to Drive and back to the client. |
 
 Authorization: all endpoints except `AuthenticateByName` and `System/Info/Public`
@@ -146,8 +170,9 @@ Steps:
    already present in the `tracks` table (also matched by `file_size` to detect changed
    files).
 3. **For each new/changed file**:
-   - read tags (artist/title/album/duration) and the embedded cover art,
-   - generate a cover thumbnail (resized to a reasonable size, JPEG),
+    - read tags (artist/title/album/duration) and the embedded cover art,
+    - generate a 300x300 JPEG thumbnail in `sqlite` mode, or a 300x300 WebP uploaded to GCS in
+      `gcs` mode,
    - upload the raw audio file to Google Drive (via OAuth2, see section 6), if not
      already uploaded,
    - insert/update the corresponding `tracks` row (including `drive_file_id`).
@@ -181,6 +206,8 @@ the database didn't change).
 - **Database**: SQLite, **baked into the container image** at deploy time (no
   remote/hosted database, no extra cost or connection-management requirement). The
   backend opens the file in read-only mode.
+- **Cover art**: JPEG BLOBs in SQLite by default; optionally WebP objects in public Google
+  Cloud Storage (`IMAGE_HOSTING=gcs`), with the object name recorded in `tracks.cover_object`.
 - **Reverse proxy / logging**: no dedicated component (e.g. nginx) — Cloud Run's built-in
   request logging (Cloud Logging) is sufficient.
 - **Backend authentication to Google Drive**: Cloud Run can have a service account

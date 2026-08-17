@@ -1,7 +1,8 @@
 # @jellite/sync
 
 Local-only script that syncs the music library into `data/jellite.sqlite`, uploading only
-new/changed files to Google Drive (see [`docs/SPEC.md`](../docs/SPEC.md) section 5).
+new/changed files to Google Drive (see [`docs/SPEC.md`](../docs/SPEC.md) section 5). Image
+hosting is selected with `--image-hosting sqlite|gcs` or `IMAGE_HOSTING`; SQLite is the default.
 
 > **Note on auth**: uploads run via OAuth2 as your own Google account (see "One-time OAuth
 > authorization" below), not the service account. Service accounts always have 0 GB of
@@ -45,6 +46,14 @@ npm run sync -- \
   --oauth-token-file ./.oauth-token.json
 ```
 
+For GCS cover hosting, add `--image-hosting gcs --gcs-bucket <bucket-name>` (or set
+`IMAGE_HOSTING=gcs` and `GCS_BUCKET_NAME`). The sync generates a 300x300 WebP and stores its
+object name in SQLite instead of storing the image BLOB. `GOOGLE_APPLICATION_CREDENTIALS` may
+be used for local GCS authentication; otherwise Application Default Credentials are used.
+
+`infra/sync-and-deploy.sh` accepts the same flags and forwards the selected image-hosting mode
+to both the sync process and Cloud Run deployment.
+
 Add `--dry-run` to skip Google Drive uploads entirely (useful for testing the
 metadata/playlist logic without real credentials — a placeholder id is stored instead of a
 real Drive file id, and `--oauth-token-file` isn't required).
@@ -58,9 +67,10 @@ real Drive file id, and `--oauth-token-file` isn't required).
    touched — the library root is never scanned wholesale.
 2. Diffs that set against tracks already present in the DB (matched by path + file size) to
    find new or changed files.
-3. For each new/changed file: extracts tags (title/artist/album/duration) and a resized
-   (300x300 JPEG) cover thumbnail from embedded FLAC/M4A tags, uploads the raw audio file to
-   the configured Drive folder, and upserts a `tracks` row.
+3. For each new/changed file: extracts tags (title/artist/album/duration) and a resized cover
+   thumbnail from embedded FLAC/M4A tags, uploads the raw audio file to the configured Drive
+   folder, and upserts a `tracks` row. The thumbnail is a JPEG BLOB in SQLite mode or a WebP
+   object in GCS mode.
 4. Rebuilds the `playlists` / `playlist_tracks` tables from the parsed `.m3u` files
    (playlist name = file name, order = file order).
 5. Logs (without deleting) any tracks present in the DB but no longer referenced by any
@@ -79,3 +89,26 @@ total counts and elapsed time.
 
 Use `infra/sync-and-deploy.sh` instead of calling this directly, to also redeploy the
 backend with the updated DB afterwards.
+
+## Export existing SQLite covers to GCS
+
+The migration command reads existing `cover_thumbnail` BLOBs, converts each one to WebP, and
+uploads it under `covers/<track-id>.webp` by default. It records the object names in the DB and
+preserves the JPEG BLOBs by default, so the existing SQLite mode remains usable:
+
+```bash
+npm run export-covers --workspace sync -- \
+  --db /path/to/jellite/data/jellite.sqlite \
+  --gcs-bucket <covers-bucket>
+```
+
+Use `--gcs-covers-prefix <prefix>` to change `covers/`, or provide `GCS_BUCKET_NAME`,
+`GCS_COVERS_PREFIX`, and `GOOGLE_APPLICATION_CREDENTIALS` as environment variables. After the
+upload, run the backend with `IMAGE_HOSTING=gcs` and the same bucket/prefix. Once GCS has been
+verified, add `--strip-sqlite-covers` to remove the old JPEG BLOBs and reduce the DB size; that
+database should then be deployed with `IMAGE_HOSTING=gcs`.
+
+The exporter prints `[uploaded/total] percent` progress. In an interactive terminal it updates
+one line; in redirected logs it prints every 100 uploads and the final value. Already exported
+rows with a non-null `cover_object` are skipped automatically; use `--overwrite` to upload all
+SQLite covers again. `--limit <n>` is useful for a small test export.

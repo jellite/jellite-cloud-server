@@ -8,7 +8,7 @@ own library and is baked into the backend's container image at deploy time (see
 ## Not committed to this repository
 
 `data/jellite.sqlite` is **not** committed here — it's specific to your own music library
-(track metadata, cover art, and Google Drive file IDs) and can be large. Generate your own
+(track metadata, cover art or GCS object names, and Google Drive file IDs) and can be large. Generate your own
 copy locally:
 
 ```bash
@@ -23,6 +23,11 @@ npm run sync -- \
 See `sync/README.md` for details. If you maintain a private fork of this project for your
 own deployment, you may choose to commit the database there (e.g. via Git LFS) so
 `infra/deploy.sh` can deploy directly from a checkout without re-running a full sync first.
+
+With `IMAGE_HOSTING=gcs`, new syncs store WebP object names in `tracks.cover_object` and leave
+`cover_thumbnail` empty. Existing SQLite databases can be migrated with
+`npm run export-covers --workspace sync`; the exporter skips rows that already have an object
+name and can remove old JPEG BLOBs with `--strip-sqlite-covers` after GCS has been verified.
 
 `data/jellite.sqlite-wal` and `data/jellite.sqlite-shm` are **never** committed (see
 `.gitignore`) — they're ephemeral SQLite WAL-mode sidecar files, regenerated automatically

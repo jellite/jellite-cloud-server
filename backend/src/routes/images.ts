@@ -1,5 +1,7 @@
 import { Router } from "express";
+import { config } from "../config.js";
 import { getPlaylistByExternalId, getPlaylistPrimaryTrack, getPlaylists, getTrack, getTrackByAlbumOrArtistStableId } from "../db.js";
+import type { TrackRow } from "../db.js";
 import { externalPlaylistId, MUSIC_LIBRARY_ID, stableId } from "../jellyfinShapes.js";
 
 export const imagesRouter = Router();
@@ -18,11 +20,42 @@ function sendCover(res: import("express").Response, cover: Buffer | null | undef
   res.send(cover);
 }
 
+function gcsCoverUrl(objectName: string): string {
+  const baseUrl = config.gcsPublicBaseUrl ??
+    `https://storage.googleapis.com/${encodeURIComponent(config.gcsBucketName!)}`;
+  const encodedObjectName = objectName.split("/").map(encodeURIComponent).join("/");
+  return `${baseUrl.replace(/\/+$/, "")}/${encodedObjectName}`;
+}
+
+function gcsCoverObject(track: TrackRow): string | undefined {
+  return track.cover_object ?? undefined;
+}
+
+function sendTrackCover(res: import("express").Response, track: TrackRow | undefined): void {
+  if (!track) {
+    res.status(404).json({ error: "No image" });
+    return;
+  }
+
+  if (config.imageHosting === "sqlite") {
+    sendCover(res, track.cover_thumbnail);
+    return;
+  }
+
+  const objectName = gcsCoverObject(track);
+  if (!objectName) {
+    res.status(404).json({ error: "No image" });
+    return;
+  }
+  res.setHeader("Cache-Control", "public, max-age=604800");
+  res.redirect(302, gcsCoverUrl(objectName));
+}
+
 // Track cover art, extracted from embedded FLAC/M4A tags during sync (see SPEC.md).
 imagesRouter.get("/Items/:id/Images/Primary", (req, res) => {
   const track = getTrack(req.params.id);
   if (track) {
-    sendCover(res, track.cover_thumbnail);
+    sendTrackCover(res, track);
     return;
   }
 
@@ -33,7 +66,7 @@ imagesRouter.get("/Items/:id/Images/Primary", (req, res) => {
   const playlist = getPlaylistByExternalId(externalPlaylistId, req.params.id);
   if (playlist) {
     const firstTrack = getPlaylistPrimaryTrack(playlist.id);
-    sendCover(res, firstTrack?.cover_thumbnail);
+    sendTrackCover(res, firstTrack);
     return;
   }
 
@@ -43,7 +76,7 @@ imagesRouter.get("/Items/:id/Images/Primary", (req, res) => {
   if (req.params.id === MUSIC_LIBRARY_ID) {
     const firstPlaylist = getPlaylists()[0];
     const firstTrack = firstPlaylist ? getPlaylistPrimaryTrack(firstPlaylist.id) : undefined;
-    sendCover(res, firstTrack?.cover_thumbnail);
+    sendTrackCover(res, firstTrack);
     return;
   }
 
@@ -53,7 +86,7 @@ imagesRouter.get("/Items/:id/Images/Primary", (req, res) => {
   // matches that album or artist name.
   const albumOrArtistTrack = getTrackByAlbumOrArtistStableId(stableId, req.params.id);
   if (albumOrArtistTrack) {
-    sendCover(res, albumOrArtistTrack.cover_thumbnail);
+    sendTrackCover(res, albumOrArtistTrack);
     return;
   }
 

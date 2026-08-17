@@ -1,5 +1,7 @@
 import "dotenv/config";
 
+export type ImageHosting = "sqlite" | "gcs";
+
 function required(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
   if (value === undefined) {
@@ -8,11 +10,41 @@ function required(name: string, fallback?: string): string {
   return value;
 }
 
+function commandLineValue(name: string): string | undefined {
+  const flag = `--${name}`;
+  const index = process.argv.indexOf(flag);
+  const value = index >= 0 ? process.argv[index + 1] : undefined;
+  return value && !value.startsWith("--") ? value : undefined;
+}
+
+function parseImageHosting(): ImageHosting {
+  const value = commandLineValue("image-hosting") ??
+    process.env.IMAGE_HOSTING ??
+    process.env.JELLITE_IMAGE_HOSTING ??
+    "sqlite";
+  if (value !== "sqlite" && value !== "gcs") {
+    throw new Error(`Invalid image hosting "${value}". Expected "sqlite" or "gcs".`);
+  }
+  return value;
+}
+
+const imageHosting = parseImageHosting();
+const gcsBucketName = commandLineValue("gcs-bucket") ?? process.env.GCS_BUCKET_NAME;
+if (imageHosting === "gcs" && !gcsBucketName) {
+  throw new Error("GCS_BUCKET_NAME is required when IMAGE_HOSTING=gcs");
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 8080),
 
   // Path to the read-only SQLite DB baked into the container image by the sync/deploy flow.
   dbPath: process.env.DB_PATH ?? "./data/jellite.sqlite",
+
+  // Covers stay in SQLite by default. In GCS mode the image route redirects to WebP objects.
+  imageHosting,
+  gcsBucketName,
+  gcsCoversPrefix: commandLineValue("gcs-covers-prefix") ?? process.env.GCS_COVERS_PREFIX ?? "covers",
+  gcsPublicBaseUrl: commandLineValue("gcs-public-base-url") ?? process.env.GCS_PUBLIC_BASE_URL,
 
   // Single, statically configured user (no multi-user support by design, see SPEC.md).
   username: required("JELLITE_USERNAME", "admin"),

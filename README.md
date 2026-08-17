@@ -4,7 +4,7 @@ A lightweight, API-only music server implementing a subset of the Jellyfin API,
 deployed on Google Cloud Run. Audio files (FLAC/M4A) are stored on Google Drive (a
 regular folder in "My Drive", not a Shared Drive — see `infra/setup-gcp.md` section 3),
 metadata and playlists live in a locally-built SQLite database baked into the container
-image.
+image. Cover art can stay in SQLite or be hosted as WebP objects in Google Cloud Storage.
 
 Full project specification: [`docs/SPEC.md`](docs/SPEC.md).
 
@@ -63,6 +63,70 @@ npm run sync -- \
   --db data/jellite.sqlite \
   --drive-folder-id <your-drive-folder-id> \
   --oauth-token-file ./.oauth-token.json
+```
+
+### GCS cover hosting
+
+The default image mode is `sqlite`. To use GCS, first create a bucket with public object reads
+and grant the identity used by the exporter `roles/storage.objectUser` on that bucket. Jellyfin
+clients request image URLs without an API token, so public read access (or a public CDN URL) is
+required for the redirect target.
+
+Export a small sample from an existing SQLite database:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/gcs-uploader-credentials.json
+npm run export-covers --workspace sync -- \
+  --db data/jellite.sqlite \
+  --gcs-bucket <covers-bucket> \
+  --limit 3
+```
+
+Run the full export. It is resumable and skips rows that already have `cover_object`:
+
+```bash
+npm run export-covers --workspace sync -- \
+  --db data/jellite.sqlite \
+  --gcs-bucket <covers-bucket>
+```
+
+Use `--overwrite` to upload every SQLite cover again, or use `--strip-sqlite-covers` after
+verifying GCS to remove the old JPEG BLOBs and reduce the database size:
+
+```bash
+npm run export-covers --workspace sync -- \
+  --db data/jellite.sqlite \
+  --gcs-bucket <covers-bucket> \
+  --overwrite
+
+npm run export-covers --workspace sync -- \
+  --db data/jellite.sqlite \
+  --gcs-bucket <covers-bucket> \
+  --strip-sqlite-covers
+```
+
+Deploy the backend in GCS mode:
+
+```bash
+export IMAGE_HOSTING=gcs
+export GCS_BUCKET_NAME=<covers-bucket>
+export GCS_COVERS_PREFIX=covers
+
+bash infra/deploy.sh
+```
+
+Or sync new tracks and deploy in one step. The same image-hosting flags are forwarded to both
+the sync process and Cloud Run:
+
+```bash
+infra/sync-and-deploy.sh \
+  --library-root /path/to/your/music/library \
+  --playlists-dir /path/to/your/playlists \
+  --drive-folder-id <your-drive-folder-id> \
+  --oauth-token-file /path/to/.oauth-token.json \
+  --image-hosting gcs \
+  --gcs-bucket <covers-bucket> \
+  --gcs-covers-prefix covers
 ```
 
 ### Deploying / rotating credentials

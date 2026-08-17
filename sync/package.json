@@ -6,10 +6,12 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "export-covers": "tsx src/exportCovers.ts",
     "start": "tsx src/index.ts",
     "authorize": "tsx src/authorize.ts"
   },
   "dependencies": {
+    "@google-cloud/storage": "^8.0.0",
     "better-sqlite3": "^11.9.1",
     "google-auth-library": "^9.15.0",
     "googleapis": "^144.0.0",

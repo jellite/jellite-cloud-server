@@ -18,6 +18,19 @@ SERVICE_NAME="${SERVICE_NAME:-jellite}"
 # Cloud Run's attached runtime identity — must already have read access to the Drive folder
 # (see infra/setup-gcp.md). When unset, Cloud Run uses the project's default compute SA.
 RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SERVICE_ACCOUNT:-}"
+IMAGE_HOSTING="${IMAGE_HOSTING:-sqlite}"
+GCS_BUCKET_NAME="${GCS_BUCKET_NAME:-}"
+GCS_COVERS_PREFIX="${GCS_COVERS_PREFIX:-covers}"
+GCS_PUBLIC_BASE_URL="${GCS_PUBLIC_BASE_URL:-}"
+
+if [ "$IMAGE_HOSTING" != "sqlite" ] && [ "$IMAGE_HOSTING" != "gcs" ]; then
+  echo "error: IMAGE_HOSTING must be sqlite or gcs" >&2
+  exit 1
+fi
+if [ "$IMAGE_HOSTING" = "gcs" ] && [ -z "$GCS_BUCKET_NAME" ]; then
+  echo "error: GCS_BUCKET_NAME is required when IMAGE_HOSTING=gcs" >&2
+  exit 1
+fi
 
 DB_PATH="$ROOT_DIR/data/jellite.sqlite"
 if [ ! -f "$DB_PATH" ]; then
@@ -55,6 +68,14 @@ if [ -n "$RUNTIME_SERVICE_ACCOUNT" ]; then
   SA_FLAG=(--service-account "$RUNTIME_SERVICE_ACCOUNT")
 fi
 
+ENV_VARS="JELLITE_SERVER_NAME=Jellite,JELLITE_USERNAME=${JELLITE_USERNAME},JELLITE_PASSWORD=${JELLITE_PASSWORD},JELLITE_ACCESS_TOKEN=${JELLITE_ACCESS_TOKEN},IMAGE_HOSTING=${IMAGE_HOSTING},GCS_COVERS_PREFIX=${GCS_COVERS_PREFIX}"
+if [ -n "$GCS_BUCKET_NAME" ]; then
+  ENV_VARS="$ENV_VARS,GCS_BUCKET_NAME=${GCS_BUCKET_NAME}"
+fi
+if [ -n "$GCS_PUBLIC_BASE_URL" ]; then
+  ENV_VARS="$ENV_VARS,GCS_PUBLIC_BASE_URL=${GCS_PUBLIC_BASE_URL}"
+fi
+
 # 512Mi (Cloud Run's default) is too small once data/jellite.sqlite (~225MB) is loaded by
 # better-sqlite3 — observed OOM kills ("container instance was found to be using too much
 # memory and was terminated") under real client load (Finamp), surfacing as 503s.
@@ -66,7 +87,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --memory 1Gi \
   --min-instances 0 \
   --max-instances 3 \
-  --set-env-vars "JELLITE_SERVER_NAME=Jellite,JELLITE_USERNAME=${JELLITE_USERNAME},JELLITE_PASSWORD=${JELLITE_PASSWORD},JELLITE_ACCESS_TOKEN=${JELLITE_ACCESS_TOKEN}" \
+  --set-env-vars "$ENV_VARS" \
   "${SA_FLAG[@]}"
 
 echo "==> Deploy complete."
@@ -77,4 +98,3 @@ if [ "$GENERATED_SECRETS" = true ]; then
   echo "    JELLITE_ACCESS_TOKEN=$JELLITE_ACCESS_TOKEN"
   echo "    Re-run with these same JELLITE_* env vars set to keep them stable across deploys."
 fi
-

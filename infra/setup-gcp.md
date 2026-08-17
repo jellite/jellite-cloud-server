@@ -6,8 +6,21 @@ Steps performed once, manually, before the first `infra/sync-and-deploy.sh` run.
 
 ```bash
 gcloud config set project <your-gcp-project>
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com drive.googleapis.com
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com drive.googleapis.com storage.googleapis.com
 ```
+
+For GCS cover hosting, create a bucket and allow public object reads because Jellyfin clients
+request image URLs without an authorization header:
+
+```bash
+gcloud storage buckets create gs://<covers-bucket> --location=<bucket-location>
+gcloud storage buckets add-iam-policy-binding gs://<covers-bucket> \
+  --member=allUsers --role=roles/storage.objectViewer
+```
+
+The identity used by the sync exporter also needs `roles/storage.objectUser` on the bucket.
+If Public Access Prevention is enforced, use a CDN or another public image endpoint instead and
+set `GCS_PUBLIC_BASE_URL` accordingly.
 
 ## 2. Service account
 
@@ -78,6 +91,10 @@ you'd rather not pass the password/token on the command line):
 
 - `JELLITE_USERNAME`, `JELLITE_PASSWORD` — credentials for the single configured user.
 - `JELLITE_ACCESS_TOKEN` — static bearer token (e.g. `openssl rand -hex 32`).
+- `IMAGE_HOSTING` — `sqlite` (default) or `gcs`.
+- `GCS_BUCKET_NAME` — required for `IMAGE_HOSTING=gcs`.
+- `GCS_COVERS_PREFIX` — optional object prefix, default `covers`.
+- `GCS_PUBLIC_BASE_URL` — optional public URL prefix for the cover objects.
 
 The defaults in `backend/.env.example` are **not** safe to use in production.
 

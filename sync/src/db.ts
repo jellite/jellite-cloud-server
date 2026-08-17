@@ -11,6 +11,7 @@ export interface TrackUpsert {
   container: string | null;
   fileSize: number;
   coverThumbnail: Buffer | null;
+  coverObject: string | null;
 }
 
 const SCHEMA = `
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   container       TEXT,
   file_size       INTEGER,
   cover_thumbnail BLOB,
+  cover_object    TEXT,
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL
 );
@@ -54,30 +56,41 @@ export function openSyncDb(path: string): Database.Database {
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
+  const columns = db.prepare("PRAGMA table_info(tracks)").all() as { name: string }[];
+  if (!columns.some((column) => column.name === "cover_object")) {
+    db.exec("ALTER TABLE tracks ADD COLUMN cover_object TEXT");
+  }
   return db;
 }
 
 export function getExistingTrackByPath(db: Database.Database, relativePath: string) {
   return db.prepare("SELECT * FROM tracks WHERE relative_path = ?").get(relativePath) as
-    | { id: string; file_size: number | null; drive_file_id: string }
+    | {
+        id: string;
+        file_size: number | null;
+        drive_file_id: string;
+        cover_thumbnail: Buffer | null;
+        cover_object?: string | null;
+      }
     | undefined;
 }
 
 export function upsertTrack(db: Database.Database, track: TrackUpsert): void {
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO tracks (id, relative_path, drive_file_id, title, artist, album, duration_ms, container, file_size, cover_thumbnail, created_at, updated_at)
-     VALUES (@id, @relativePath, @driveFileId, @title, @artist, @album, @durationMs, @container, @fileSize, @coverThumbnail, @now, @now)
+    `INSERT INTO tracks (id, relative_path, drive_file_id, title, artist, album, duration_ms, container, file_size, cover_thumbnail, cover_object, created_at, updated_at)
+     VALUES (@id, @relativePath, @driveFileId, @title, @artist, @album, @durationMs, @container, @fileSize, @coverThumbnail, @coverObject, @now, @now)
      ON CONFLICT(relative_path) DO UPDATE SET
        drive_file_id = excluded.drive_file_id,
        title = excluded.title,
        artist = excluded.artist,
        album = excluded.album,
        duration_ms = excluded.duration_ms,
-       container = excluded.container,
-       file_size = excluded.file_size,
-       cover_thumbnail = excluded.cover_thumbnail,
-       updated_at = excluded.updated_at`
+        container = excluded.container,
+        file_size = excluded.file_size,
+        cover_thumbnail = excluded.cover_thumbnail,
+        cover_object = excluded.cover_object,
+        updated_at = excluded.updated_at`
   ).run({ ...track, now });
 }
 

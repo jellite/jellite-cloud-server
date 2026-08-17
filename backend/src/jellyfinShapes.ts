@@ -67,9 +67,14 @@ export function playlistToItem(playlist: PlaylistRow, trackCount: number) {
   };
 }
 
+export function trackHasCover(track: TrackRow): boolean {
+  return config.imageHosting === "gcs" ? Boolean(track.cover_object) : Boolean(track.cover_thumbnail);
+}
+
 export function trackToItem(track: TrackRow, playlistId?: string, index?: number) {
   const runTimeTicks = track.duration_ms != null ? Math.round(track.duration_ms * 10000) : undefined;
   const artists = track.artist ? [track.artist] : [];
+  const hasCover = trackHasCover(track);
 
   return {
     Id: track.id,
@@ -81,7 +86,7 @@ export function trackToItem(track: TrackRow, playlistId?: string, index?: number
     Container: track.container ?? undefined,
     Album: track.album ?? undefined,
     AlbumId: track.album ? stableId(track.album) : undefined,
-    AlbumPrimaryImageTag: track.album && track.cover_thumbnail ? track.id : undefined,
+    AlbumPrimaryImageTag: track.album && hasCover ? track.id : undefined,
     Artists: artists,
     ArtistItems: artists.map((name) => ({ Name: name, Id: stableId(name) })),
     AlbumArtist: track.artist ?? undefined,
@@ -90,11 +95,11 @@ export function trackToItem(track: TrackRow, playlistId?: string, index?: number
     IndexNumber: index,
     ParentIndexNumber: 1,
     PlaylistItemId: playlistId ? `${playlistId}:${track.id}` : undefined,
-    ImageTags: track.cover_thumbnail ? { Primary: track.id } : undefined,
+    ImageTags: hasCover ? { Primary: track.id } : undefined,
     // All embedded cover thumbnails are extracted/normalized to 300x300 during sync (see
     // SPEC.md), so this is always accurate — real Jellyfin sends this too and some
     // clients use it to pre-size image widgets before the image itself has loaded.
-    PrimaryImageAspectRatio: track.cover_thumbnail ? 1 : undefined,
+    PrimaryImageAspectRatio: hasCover ? 1 : undefined,
     BackdropImageTags: [],
     LocationType: "FileSystem",
     // Present with sane "never played" defaults — Jellite doesn't track play state (see

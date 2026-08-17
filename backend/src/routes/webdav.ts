@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { requireAuth } from "../auth.js";
-import { getAllTrackPaths } from "../db.js";
+import { getAllTrackPaths, getPlaylistTracks, getPlaylists } from "../db.js";
 import type { TrackPathRow } from "../db.js";
 import { streamDriveFile } from "../driveClient.js";
 
@@ -26,6 +26,10 @@ const MIME_BY_CONTAINER: Record<string, string> = {
   wav: "audio/wav",
   alac: "audio/mp4",
 };
+
+const PLAYLISTS_DIR = "playlists";
+const PLAYLIST_EXTENSION = ".m3u";
+const PLAYLIST_MIME_TYPE = "audio/x-mpegurl; charset=utf-8";
 
 function contentTypeFor(track: TrackPathRow): string {
   const container = track.container?.toLowerCase();
@@ -68,10 +72,26 @@ interface DirEntry {
   name: string;
   isCollection: boolean;
   track?: TrackPathRow;
+  contentType?: string;
+  contentLength?: number;
+  updatedAt?: string;
 }
 
 /** Lists the immediate children (folders + files) directly under `prefix` ("" = root). */
 function listChildren(prefix: string): DirEntry[] {
+  if (prefix === PLAYLISTS_DIR) {
+    return getPlaylists().map((playlist) => {
+      const content = buildPlaylistM3u(playlist.id);
+      return {
+        name: `${playlist.name}${PLAYLIST_EXTENSION}`,
+        isCollection: false,
+        contentType: PLAYLIST_MIME_TYPE,
+        contentLength: Buffer.byteLength(content),
+        updatedAt: playlist.updated_at,
+      };
+    });
+  }
+
   const prefixLen = prefix === "" ? 0 : prefix.length + 1;
   const folders = new Set<string>();
   const files: DirEntry[] = [];
@@ -85,6 +105,7 @@ function listChildren(prefix: string): DirEntry[] {
       folders.add(rest.slice(0, slashIndex));
     }
   }
+  if (prefix === "") folders.add(PLAYLISTS_DIR);
   const folderEntries: DirEntry[] = [...folders].sort().map((name) => ({ name, isCollection: true }));
   return [...folderEntries, ...files];
 }
@@ -99,13 +120,63 @@ function encodeHref(path: string, trailingSlash: boolean): string {
   return `/webdav/${segments.join("/")}${trailingSlash ? "/" : ""}`.replace(/\/{2,}/g, "/");
 }
 
-function propResponseXml(path: string, displayName: string, entry: { isCollection: boolean; track?: TrackPathRow }): string {
+function fileNameWithoutExtension(relativePath: string): string {
+  const fileName = relativePath.split("/").pop() ?? relativePath;
+  const dotIndex = fileName.lastIndexOf(".");
+  return dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+}
+
+function extinfDisplayName(track: { artist: string | null; title: string | null; relative_path: string }): string {
+  const artist = track.artist?.trim();
+  const title = track.title?.trim();
+  if (artist && title) return `${artist} - ${title}`;
+  if (title) return title;
+  return fileNameWithoutExtension(track.relative_path);
+}
+
+function buildPlaylistM3u(playlistId: string): string {
+  const lines = getPlaylistTracks(playlistId).flatMap((track) => {
+    const durationSec = track.duration_ms != null ? Math.max(0, Math.floor(track.duration_ms / 1000)) : -1;
+    const name = extinfDisplayName(track).replace(/\r?\n/g, " ");
+    return [`#EXTINF:${durationSec},${name}`, `../${track.relative_path}`];
+  });
+  return `#EXTM3U\n${lines.join("\n")}${lines.length > 0 ? "\n" : ""}`;
+}
+
+function findPlaylistM3u(path: string):
+  | { content: string; updatedAt: string; contentLength: number; contentType: string }
+  | undefined {
+  if (!path.startsWith(`${PLAYLISTS_DIR}/`)) return undefined;
+  const rest = path.slice(`${PLAYLISTS_DIR}/`.length);
+  if (rest.includes("/") || !rest.toLowerCase().endsWith(PLAYLIST_EXTENSION)) return undefined;
+
+  const playlistName = rest.slice(0, -PLAYLIST_EXTENSION.length);
+  const playlist = getPlaylists().find((candidate) => candidate.name === playlistName);
+  if (!playlist) return undefined;
+
+  const content = buildPlaylistM3u(playlist.id);
+  return {
+    content,
+    updatedAt: playlist.updated_at,
+    contentLength: Buffer.byteLength(content),
+    contentType: PLAYLIST_MIME_TYPE,
+  };
+}
+
+function propResponseXml(
+  path: string,
+  displayName: string,
+  entry: { isCollection: boolean; track?: TrackPathRow; contentType?: string; contentLength?: number; updatedAt?: string }
+): string {
   const href = encodeHref(path, entry.isCollection);
-  const extraProps = !entry.isCollection && entry.track
-    ? `<D:getcontentlength>${entry.track.file_size ?? 0}</D:getcontentlength>` +
-      `<D:getcontenttype>${contentTypeFor(entry.track)}</D:getcontenttype>` +
-      `<D:getlastmodified>${new Date(entry.track.updated_at).toUTCString()}</D:getlastmodified>`
-    : "";
+  const contentLength = entry.track?.file_size ?? entry.contentLength;
+  const contentType = entry.track ? contentTypeFor(entry.track) : entry.contentType;
+  const updatedAt = entry.track?.updated_at ?? entry.updatedAt;
+  const extraProps = entry.isCollection
+    ? ""
+    : `<D:getcontentlength>${contentLength ?? 0}</D:getcontentlength>` +
+      `<D:getcontenttype>${contentType ?? "application/octet-stream"}</D:getcontenttype>` +
+      `<D:getlastmodified>${new Date(updatedAt ?? 0).toUTCString()}</D:getlastmodified>`;
   return (
     "<D:response>" +
     `<D:href>${xmlEscape(href)}</D:href>` +
@@ -140,14 +211,18 @@ webdavRouter.propfind("*", (req, res) => {
     return;
   }
   const includeChildren = depthHeader !== "0";
+  const playlistM3u = findPlaylistM3u(path);
 
-  const track = path !== "" ? findTrack(path) : undefined;
+  const track = !playlistM3u && path !== "" ? findTrack(path) : undefined;
   let body: string;
-  if (track) {
+  if (playlistM3u) {
+    body = propResponseXml(path, path.split("/").pop() ?? path, { isCollection: false, ...playlistM3u });
+  } else if (track) {
     body = propResponseXml(path, path.split("/").pop() ?? path, { isCollection: false, track });
   } else {
     const children = listChildren(path);
-    if (path !== "" && children.length === 0) {
+    const collectionExists = path === "" || path === PLAYLISTS_DIR || children.length > 0;
+    if (!collectionExists) {
       res.status(404).end();
       return;
     }
@@ -168,6 +243,23 @@ webdavRouter.propfind("*", (req, res) => {
 
 async function handleGetOrHead(req: Request, res: Response): Promise<void> {
   const path = normalizePath(req.path);
+  const playlistM3u = findPlaylistM3u(path);
+  if (playlistM3u) {
+    if (req.method === "HEAD") {
+      res
+        .status(200)
+        .set({ "Content-Type": playlistM3u.contentType, "Content-Length": String(playlistM3u.contentLength) })
+        .end();
+      return;
+    }
+
+    res
+      .status(200)
+      .set({ "Content-Type": playlistM3u.contentType, "Content-Length": String(playlistM3u.contentLength) })
+      .send(playlistM3u.content);
+    return;
+  }
+
   const track = findTrack(path);
   if (!track) {
     res.status(404).end();
