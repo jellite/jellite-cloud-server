@@ -12,28 +12,6 @@ systemRouter.get("/", requireAuth, (_req, res) => {
   res.sendStatus(200);
 });
 
-// foobar2000-mobile also probes with a WebDAV `PROPFIND / (Depth: 0)` request (it appears to
-// speculatively check for a WebDAV share before/alongside the Jellyfin API). Jellite isn't a
-// WebDAV server, but responding with a minimal, valid single-resource multistatus document
-// (rather than 404) lets it get past this probe and proceed to `AuthenticateByName`.
-systemRouter.propfind("/", requireAuth, (_req, res) => {
-  res
-    .status(207)
-    .type("application/xml; charset=utf-8")
-    .send(
-      '<?xml version="1.0" encoding="utf-8"?>' +
-        '<D:multistatus xmlns:D="DAV:">' +
-        "<D:response>" +
-        "<D:href>/</D:href>" +
-        "<D:propstat>" +
-        "<D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop>" +
-        "<D:status>HTTP/1.1 200 OK</D:status>" +
-        "</D:propstat>" +
-        "</D:response>" +
-        "</D:multistatus>",
-    );
-});
-
 // Unauthenticated: used by Jellyfin clients to discover/identify the server before login.
 systemRouter.get("/System/Info/Public", (_req, res) => {
   res.json(serverInfoPublic());

@@ -11,9 +11,18 @@ import { audioRouter } from "./routes/audio.js";
 import { playbackInfoRouter } from "./routes/playbackInfo.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { displayPreferencesRouter } from "./routes/displayPreferences.js";
+import { webdavRouter } from "./routes/webdav.js";
 import { attachSocketServer } from "./routes/socket.js";
 
 const app = express();
+
+// Mounted before the global `cors()` middleware below: cors() intercepts and
+// auto-responds to *every* OPTIONS request (not just browser CORS preflights), which
+// would otherwise swallow WebDAV clients' OPTIONS capability probe before it ever reached
+// webdavRouter's own handler (which needs to set the `DAV: 1` header, not a CORS one).
+// /webdav is for native desktop/mobile clients (e.g. foobar2000), not browsers, so it has
+// no need for CORS handling anyway.
+app.use("/webdav", webdavRouter);
 
 // Allow browser-based clients (Jellyfin Web, Finamp web, custom dashboards, ...) to call
 // this API cross-origin. Jellyfin clients authenticate via custom headers rather than
@@ -21,7 +30,7 @@ const app = express();
 // and expose response headers some web clients read (e.g. streaming range info).
 const corsOptions: cors.CorsOptions = {
   origin: config.corsAllowedOrigins.includes("*") ? true : config.corsAllowedOrigins,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "PROPFIND"],
   allowedHeaders: [
     "Content-Type",
     "Authorization",

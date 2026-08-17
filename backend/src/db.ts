@@ -63,6 +63,33 @@ export function getTrack(id: string): TrackRow | undefined {
   return db.prepare("SELECT * FROM tracks WHERE id = ?").get(id) as TrackRow | undefined;
 }
 
+export interface TrackPathRow {
+  id: string;
+  relative_path: string;
+  drive_file_id: string;
+  file_size: number | null;
+  container: string | null;
+  updated_at: string;
+}
+
+let cachedTrackPaths: TrackPathRow[] | undefined;
+
+/**
+ * Lightweight projection of every track's path, used by the WebDAV browser (see
+ * routes/webdav.ts) to build directory listings for arbitrary path prefixes without a
+ * dedicated folder table. Loaded once and cached in memory: the DB is read-only and baked
+ * into the image at deploy time (see the comment on `db` above), so it can't change under
+ * us during the process lifetime, and the full track list is small enough to hold in RAM.
+ */
+export function getAllTrackPaths(): TrackPathRow[] {
+  if (!cachedTrackPaths) {
+    cachedTrackPaths = db
+      .prepare("SELECT id, relative_path, drive_file_id, file_size, container, updated_at FROM tracks")
+      .all() as TrackPathRow[];
+  }
+  return cachedTrackPaths;
+}
+
 /**
  * Jellite exposes stable, deterministic ids for album/artist "entities" (see
  * jellyfinShapes.ts stableId()) even though they have no real row of their own — clients
