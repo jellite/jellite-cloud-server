@@ -86,7 +86,7 @@ export function upsertTrack(db: Database.Database, track: TrackUpsert): void {
        artist = excluded.artist,
        album = excluded.album,
        duration_ms = excluded.duration_ms,
-        container = excluded.container,
+       container = excluded.container,
         file_size = excluded.file_size,
         cover_thumbnail = excluded.cover_thumbnail,
         cover_object = excluded.cover_object,

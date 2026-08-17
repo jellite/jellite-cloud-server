@@ -63,17 +63,18 @@ async function main(): Promise<void> {
     `SELECT id, cover_thumbnail FROM tracks WHERE ${coverWhere} ORDER BY id${limit ? " LIMIT ?" : ""}`
   ).iterate(...(limit ? [limit] : [])) as Iterable<CoverRow>;
   const storage = createStorage(keyFilename);
+  const objectPrefix = prefix;
   const stripSqliteCovers = args["strip-sqlite-covers"] === true;
   const uploadedObjects: { id: string; objectName: string }[] = [];
-  const expected = limit ? Math.min(limit, total) : total;
 
+  const expected = limit ? Math.min(limit, total) : total;
   console.log(
     `${overwrite ? "Uploading" : "Uploading pending"} ${expected} SQLite cover(s) to gs://${bucketName}/${prefix}/ as WebP ...`
   );
   let uploaded = 0;
   for (const row of rows) {
     const webp = await sharp(row.cover_thumbnail!).webp({ quality: 80 }).toBuffer();
-    const objectName = coverObjectName(row.id, prefix);
+    const objectName = coverObjectName(row.id, objectPrefix);
     await uploadCover(storage, bucketName, objectName, webp);
     uploadedObjects.push({ id: row.id, objectName });
     uploaded += 1;
@@ -86,7 +87,6 @@ async function main(): Promise<void> {
       console.log(progress);
     }
   }
-
   const updateObjects = db.transaction(() => {
     const updateObject = db.prepare(
       stripSqliteCovers

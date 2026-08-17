@@ -58,6 +58,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   const token = extractToken(req);
   if (!token || token !== config.accessToken) {
+    // Without `WWW-Authenticate`, browsers and native WebDAV clients (e.g. macOS Finder)
+    // have no signal that Basic Auth is an option here and won't show a login prompt or
+    // retry with credentials — they just show a generic "can't connect" error. Jellyfin
+    // clients don't care about this response header, so it's safe to send unconditionally.
+    res.set("WWW-Authenticate", 'Basic realm="Jellite"');
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
