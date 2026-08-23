@@ -161,7 +161,7 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
     }
 
     const uploadStartedAt = Date.now();
-    progress.update(index, `uploading "${basename(absolutePath)}" (${formatBytes(fileSize)})...`, true);
+    // progress.update(index, `uploading "${basename(absolutePath)}" (${formatBytes(fileSize)})...`, true);
 
     const metadata = await extractMetadata(absolutePath, options.imageHosting);
     const driveFileId =

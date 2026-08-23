@@ -1,3 +1,5 @@
+import http from "node:http";
+import http2 from "node:http2";
 import cors from "cors";
 import express from "express";
 import { config } from "./config.js";
@@ -12,9 +14,12 @@ import { playbackInfoRouter } from "./routes/playbackInfo.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { displayPreferencesRouter } from "./routes/displayPreferences.js";
 import { webdavRouter } from "./routes/webdav.js";
+import { webRouter } from "./routes/web.js";
 import { attachSocketServer } from "./routes/socket.js";
 
 const app = express();
+
+app.use("/web", webRouter);
 
 // Mounted before the global `cors()` middleware below: cors() intercepts and
 // auto-responds to *every* OPTIONS request (not just browser CORS preflights), which
@@ -88,8 +93,72 @@ app.use(displayPreferencesRouter);
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 
-const server = app.listen(config.port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Jellite backend listening on port ${config.port}`);
-});
-attachSocketServer(server);
+const prohibitedHttp2Headers = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-connection",
+  "transfer-encoding",
+  "upgrade",
+]);
+
+function startServer(): void {
+  // Express 4 depends on HTTP/1 request/response internals, while Cloud Run's end-to-end
+  // HTTP/2 mode sends h2c to the container. Keep Express on an unreachable loopback port
+  // and proxy the public h2c server to it. This removes Cloud Run's 32MB HTTP/1.1 response
+  // limit without changing the routing or middleware behavior of the existing app.
+  const appServer = http.createServer(app);
+  attachSocketServer(appServer);
+
+  appServer.listen(0, "127.0.0.1", () => {
+    const address = appServer.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Unable to determine internal HTTP server port");
+    }
+
+    const server = http2.createServer();
+    server.on("stream", (stream, headers) => {
+      const method = headers[":method"];
+      const path = headers[":path"];
+      if (!method || !path) {
+        stream.respond({ ":status": 400 });
+        stream.end();
+        return;
+      }
+
+      const requestHeaders: http.OutgoingHttpHeaders = {};
+      for (const [name, value] of Object.entries(headers)) {
+        if (!name.startsWith(":")) requestHeaders[name] = value;
+      }
+
+      const upstreamRequest = http.request(
+        { host: "127.0.0.1", port: address.port, method, path, headers: requestHeaders },
+        (upstreamResponse) => {
+          const responseHeaders: http2.OutgoingHttpHeaders = { ":status": upstreamResponse.statusCode ?? 502 };
+          for (const [name, value] of Object.entries(upstreamResponse.headers)) {
+            if (value !== undefined && !prohibitedHttp2Headers.has(name.toLowerCase())) {
+              responseHeaders[name] = value;
+            }
+          }
+          stream.respond(responseHeaders);
+          upstreamResponse.pipe(stream);
+        }
+      );
+
+      upstreamRequest.on("error", () => {
+        if (!stream.closed) {
+          stream.respond({ ":status": 502 });
+          stream.end();
+        }
+      });
+      stream.on("error", () => upstreamRequest.destroy());
+      stream.pipe(upstreamRequest);
+    });
+
+    server.listen(config.port, () => {
+      // eslint-disable-next-line no-console
+      console.log(`Jellite backend listening on port ${config.port}`);
+    });
+  });
+}
+
+startServer();

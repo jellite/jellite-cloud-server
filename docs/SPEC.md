@@ -98,8 +98,8 @@ to preserve compatibility with existing databases and deployments.
   `tracks.cover_thumbnail`. The backend serves the image directly from SQLite.
 - `gcs`: sync generates a 300x300 WebP thumbnail, uploads it to Google Cloud Storage, and
   stores the object name in `tracks.cover_object` (by default `covers/<track-id>.webp`). In
-  this mode `cover_thumbnail` is empty and the backend redirects image requests to the
-  public GCS object URL.
+  this mode `cover_thumbnail` is empty and the backend proxies image bytes from the public
+  GCS object URL.
 
 `gcs` requires `GCS_BUCKET_NAME`. `GCS_COVERS_PREFIX` changes the object prefix, and
 `GCS_PUBLIC_BASE_URL` can point to a custom public URL or CDN. The bucket must allow public
@@ -121,14 +121,15 @@ present).
 | Endpoint | Method | Description |
 |---|---|---|
 | `/Users/AuthenticateByName` | POST | Login; compared against a hardcoded/env user+password; returns a static `AccessToken` + `User` object. |
-| `/` | GET/HEAD | Not part of the Jellyfin API — a "ping + login" endpoint for clients (e.g. foobar2000-mobile) that probe the server root with `Authorization: Basic` instead of calling `AuthenticateByName`. Returns `200 OK` with no body, protected by `requireAuth` (see below). |
+| `/` | GET/HEAD | Not part of the Jellyfin API — a "ping + login" endpoint for clients (e.g. foobar2000-mobile) that probe the server root with `Authorization: Basic` instead of calling `AuthenticateByName`. Returns `200 OK` with no body, protected by `requireAuth` (see below). For unauthenticated browser navigations (`Accept: text/html`) it redirects to `/web`. |
 | `/` | PROPFIND | Not part of the Jellyfin API — foobar2000-mobile additionally probes the root with a WebDAV `PROPFIND` (Depth: 0) request before trying `AuthenticateByName`. Returns a minimal, valid `multistatus` document (207) describing `/` as a collection, protected by `requireAuth`, instead of 404. |
+| `/web` and `/web/*` | Any | Optional reverse proxy path for Feishin web UI, enabled by `FEISHIN_UPSTREAM_URL` (so a single public domain can expose both API and web client). |
 | `/webdav/*` | OPTIONS/PROPFIND/GET/HEAD | Read-only WebDAV access to the library's Artist/Album/Track hierarchy, plus a virtual `playlists/` directory containing generated `.m3u` files built from the SQLite playlist tables. Audio files are streamed from Google Drive; playlist files are generated dynamically. `OPTIONS` is unauthenticated for capability discovery, other methods require auth, and `PROPFIND Depth: infinity` is rejected with 403. |
 | `/System/Info/Public` | GET | Server identification (name, version, Id) — used by the client to detect the server type. |
 | `/Users/{userId}` | GET | The logged-in (single) user's data. |
 | `/Users/{userId}/Views` or `/Items?includeItemTypes=Playlist` | GET | List of playlists as a `BaseItemDto` collection (type `Playlist`). |
 | `/Playlists/{id}/Items` | GET | Ordered list of a playlist's tracks, with fields required for playback (Id, Name, Artists, Album, RunTimeTicks, index). |
-| `/Items/{id}/Images/Primary` | GET | Serves the image from SQLite or redirects to a public WebP object in GCS, depending on `IMAGE_HOSTING`. |
+| `/Items/{id}/Images/Primary` | GET | Serves the image from SQLite or proxies it from a public WebP object in GCS, depending on `IMAGE_HOSTING`. |
 | `/Audio/{id}/stream` (or `/Audio/{id}/universal`) | GET | Streams audio bytes — proxied from Google Drive (`files.get?alt=media`), with full `Range` header support (seek), passed through 1:1 to Drive and back to the client. |
 
 Authorization: all endpoints except `AuthenticateByName` and `System/Info/Public`

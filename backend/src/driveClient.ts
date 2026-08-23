@@ -14,10 +14,9 @@ const auth = new google.auth.GoogleAuth({
 const drive = google.drive({ version: "v3", auth });
 
 /**
- * Streams an audio file straight from Google Drive to the HTTP response, passing through
- * the `Range` header 1:1 so clients can seek without the backend having to buffer or
- * understand the audio format. This keeps Drive API usage to "one call per playback" and
- * avoids any transcoding.
+ * Streams an audio file straight from Google Drive, forwarding the `Range` header 1:1.
+ * Cloud Run is configured for h2c/HTTP-2 end-to-end because its HTTP/1.1 mode caps
+ * responses at 32MB; large lossless tracks must therefore never be artificially truncated.
  */
 export async function streamDriveFile(fileId: string, rangeHeader: string | undefined, res: Response): Promise<void> {
   const driveRes = await drive.files.get(

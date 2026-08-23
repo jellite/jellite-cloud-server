@@ -70,7 +70,7 @@ npm run sync -- \
 The default image mode is `sqlite`. To use GCS, first create a bucket with public object reads
 and grant the identity used by the exporter `roles/storage.objectUser` on that bucket. Jellyfin
 clients request image URLs without an API token, so public read access (or a public CDN URL) is
-required for the redirect target.
+required for backend-side fetch/proxying.
 
 Export a small sample from an existing SQLite database:
 

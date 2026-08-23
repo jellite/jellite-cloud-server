@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "export-covers": "tsx src/exportCovers.ts",
     "start": "tsx src/index.ts",
-    "authorize": "tsx src/authorize.ts"
+    "authorize": "tsx src/authorize.ts",
+    "check-drive": "tsx src/checkDriveFiles.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

@@ -58,6 +58,21 @@ Add `--dry-run` to skip Google Drive uploads entirely (useful for testing the
 metadata/playlist logic without real credentials — a placeholder id is stored instead of a
 real Drive file id, and `--oauth-token-file` isn't required).
 
+## Verifying existing Drive file ids
+
+To verify that all `tracks.drive_file_id` values in the current SQLite DB still point to
+readable files on Drive (same access path the backend uses), run:
+
+```bash
+npm run check-drive --workspace sync -- --db /path/to/jellite/data/jellite.sqlite
+```
+
+Optional flags:
+- `--key-file /path/to/service-account.json` (otherwise uses `GOOGLE_APPLICATION_CREDENTIALS`)
+- `--concurrency <n>` (default `8`)
+
+The command exits with code `1` if any file is missing/trashed/inaccessible.
+
 ## What it does
 
 1. Reads every `.m3u` file in `--playlists-dir` and collects the union of every track path

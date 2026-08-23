@@ -6,14 +6,15 @@
 # Env vars (with defaults): GCP_PROJECT, GCP_REGION, SERVICE_NAME, RUNTIME_SERVICE_ACCOUNT,
 # JELLITE_USERNAME, JELLITE_PASSWORD, JELLITE_ACCESS_TOKEN (last two are auto-generated with
 # `openssl rand` and printed once if not set — the service is deployed with
-# --allow-unauthenticated at the Cloud Run layer, so a real access token matters).
+# --allow-unauthenticated at the Cloud Run layer, so a real access token matters),
+# FEISHIN_UPSTREAM_URL (optional, enables /web proxying to a separate Feishin service).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 GCP_PROJECT="${GCP_PROJECT:?Set GCP_PROJECT to your GCP project id}"
-GCP_REGION="${GCP_REGION:-europe-central2}"
+GCP_REGION="${GCP_REGION:-europe-west1}"
 SERVICE_NAME="${SERVICE_NAME:-jellite}"
 # Cloud Run's attached runtime identity — must already have read access to the Drive folder
 # (see infra/setup-gcp.md). When unset, Cloud Run uses the project's default compute SA.
@@ -22,6 +23,7 @@ IMAGE_HOSTING="${IMAGE_HOSTING:-sqlite}"
 GCS_BUCKET_NAME="${GCS_BUCKET_NAME:-}"
 GCS_COVERS_PREFIX="${GCS_COVERS_PREFIX:-covers}"
 GCS_PUBLIC_BASE_URL="${GCS_PUBLIC_BASE_URL:-}"
+FEISHIN_UPSTREAM_URL="${FEISHIN_UPSTREAM_URL:-}"
 
 if [ "$IMAGE_HOSTING" != "sqlite" ] && [ "$IMAGE_HOSTING" != "gcs" ]; then
   echo "error: IMAGE_HOSTING must be sqlite or gcs" >&2
@@ -75,6 +77,9 @@ fi
 if [ -n "$GCS_PUBLIC_BASE_URL" ]; then
   ENV_VARS="$ENV_VARS,GCS_PUBLIC_BASE_URL=${GCS_PUBLIC_BASE_URL}"
 fi
+if [ -n "$FEISHIN_UPSTREAM_URL" ]; then
+  ENV_VARS="$ENV_VARS,FEISHIN_UPSTREAM_URL=${FEISHIN_UPSTREAM_URL}"
+fi
 
 # 512Mi (Cloud Run's default) is too small once data/jellite.sqlite (~225MB) is loaded by
 # better-sqlite3 — observed OOM kills ("container instance was found to be using too much
@@ -87,6 +92,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --memory 1Gi \
   --min-instances 0 \
   --max-instances 3 \
+  --use-http2 \
   --set-env-vars "$ENV_VARS" \
   "${SA_FLAG[@]}"
 

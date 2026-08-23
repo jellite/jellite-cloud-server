@@ -3,7 +3,7 @@
 API-only, read-only backend implementing a minimal Jellyfin-compatible API subset (see
 [`docs/SPEC.md`](../docs/SPEC.md) section 4). Serves playlist/track metadata and proxies audio
 bytes straight from Google Drive with `Range` support for seeking. Cover art can be served from
-SQLite (`IMAGE_HOSTING=sqlite`, the default) or as redirects to WebP objects in public GCS
+SQLite (`IMAGE_HOSTING=sqlite`, the default) or as proxied WebP objects from public GCS
 (`IMAGE_HOSTING=gcs`).
 
 ## Local development
@@ -26,6 +26,8 @@ See `.env.example` for the full list. Key ones:
 - `GCS_COVERS_PREFIX` — object prefix, default `covers`.
 - `GCS_PUBLIC_BASE_URL` — optional public URL prefix; defaults to
   `https://storage.googleapis.com/<GCS_BUCKET_NAME>`.
+- `FEISHIN_UPSTREAM_URL` — optional upstream to reverse-proxy under `/web` (for serving a
+  separate Feishin web UI through the same domain as this API).
 - `JELLITE_USERNAME` / `JELLITE_PASSWORD` — the single hardcoded user's credentials.
 - `JELLITE_ACCESS_TOKEN` — static bearer token accepted on all authenticated endpoints.
 - `GOOGLE_APPLICATION_CREDENTIALS` — only needed locally; on Cloud Run, prefer attaching

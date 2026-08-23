@@ -31,6 +31,30 @@ function gcsCoverObject(track: TrackRow): string | undefined {
   return track.cover_object ?? undefined;
 }
 
+// Proxies (rather than 302-redirects to) the GCS object so the response stays same-origin.
+// WebKit/Safari fails to follow a cross-origin redirect when the original request carries
+// an `Authorization` header (as Feishin's image fetches do) — the final GCS response's own
+// `Access-Control-Allow-Origin` is correct, but WebKit still rejects it as a CORS violation.
+// Chromium/Firefox handle this redirect fine, so the bug only reproduces in Safari. Proxying
+// avoids the cross-origin hop (and the CORS bucket config) entirely.
+async function proxyGcsCover(res: import("express").Response, objectName: string): Promise<void> {
+  try {
+    const upstream = await fetch(gcsCoverUrl(objectName));
+    if (!upstream.ok || !upstream.body) {
+      res.status(404).json({ error: "No image" });
+      return;
+    }
+    res.setHeader("Content-Type", upstream.headers.get("content-type") ?? "image/webp");
+    res.setHeader("Cache-Control", "public, max-age=604800");
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    const { Readable } = await import("node:stream");
+    Readable.fromWeb(upstream.body as import("stream/web").ReadableStream).pipe(res);
+  } catch {
+    res.status(502).json({ error: "Upstream image fetch failed" });
+  }
+}
+
 function sendTrackCover(res: import("express").Response, track: TrackRow | undefined): void {
   if (!track) {
     res.status(404).json({ error: "No image" });
@@ -47,8 +71,7 @@ function sendTrackCover(res: import("express").Response, track: TrackRow | undef
     res.status(404).json({ error: "No image" });
     return;
   }
-  res.setHeader("Cache-Control", "public, max-age=604800");
-  res.redirect(302, gcsCoverUrl(objectName));
+  void proxyGcsCover(res, objectName);
 }
 
 // Track cover art, extracted from embedded FLAC/M4A tags during sync (see SPEC.md).

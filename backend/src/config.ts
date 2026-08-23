@@ -76,4 +76,8 @@ export const config = {
     .split(",")
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0),
+
+  // Optional Feishin web UI upstream. When set, Jellite proxies /web and /web/* there so
+  // a single Cloud Run domain mapping can still expose the separate Feishin service.
+  feishinUpstreamUrl: process.env.FEISHIN_UPSTREAM_URL?.replace(/\/+$/, ""),
 };

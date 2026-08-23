@@ -1,14 +1,39 @@
 import { Router } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { requireAuth } from "../auth.js";
 import { serverInfoPublic } from "../jellyfinShapes.js";
 
 export const systemRouter = Router();
 
+function hasAuthMaterial(req: Request): boolean {
+  return Boolean(
+    req.header("Authorization") ||
+      req.header("X-Emby-Authorization") ||
+      req.header("X-Emby-Token") ||
+      req.header("X-MediaBrowser-Token") ||
+      req.query.api_key ||
+      req.query.ApiKey ||
+      req.query.apiKey ||
+      req.query.X_Emby_Token
+  );
+}
+
+function isBrowserNavigation(req: Request): boolean {
+  const accept = req.header("Accept") ?? "";
+  return !hasAuthMaterial(req) && accept.includes("text/html");
+}
+
 // Some clients (e.g. foobar2000's mobile app) probe the server with a plain
 // `HEAD /` / `GET /` request carrying HTTP Basic Auth credentials before/instead of using the
 // Jellyfin API. Without this route it 404s and such clients treat the server as unreachable.
 // requireAuth() accepts Basic Auth (see auth.ts), so this doubles as a login check for them.
-systemRouter.get("/", requireAuth, (_req, res) => {
+systemRouter.get("/", (req: Request, res: Response, next: NextFunction) => {
+  if (isBrowserNavigation(req)) {
+    res.redirect(302, "/web");
+    return;
+  }
+  requireAuth(req, res, next);
+}, (_req, res) => {
   res.sendStatus(200);
 });
 
