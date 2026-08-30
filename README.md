@@ -21,6 +21,7 @@ backend has been deployed and tested against a real Jellyfin-compatible client (
 docs/     — project specification (docs/SPEC.md)
 backend/  — Jellyfin-compatible API server (Express + TypeScript)
 sync/     — library sync script (.m3u playlists) -> Google Drive + SQLite
+upnp/     — DLNA/UPnP MediaServer bridge for local network audio players
 infra/    — deployment scripts (Cloud Run) + one-time GCP setup
 data/     — where the local jellite.sqlite database lives (see data/README.md);
             not committed in this repo — generate your own with `npm run sync`
@@ -29,9 +30,10 @@ data/     — where the local jellite.sqlite database lives (see data/README.md)
 ## Quick start
 
 ```bash
-npm install                         # installs backend + sync (npm workspaces)
-npm run build                       # compiles both TypeScript packages
+npm install                         # installs backend + sync + upnp (npm workspaces)
+npm run build                       # compiles all TypeScript packages
 npm run backend                     # runs the backend alone (no sync), on port 8080
+npm run upnp                        # runs the UPnP/DLNA bridge server
 ```
 
 Before you can run the backend for real, you need:

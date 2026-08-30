@@ -127,9 +127,11 @@ present).
 | `/webdav/*` | OPTIONS/PROPFIND/GET/HEAD | Read-only WebDAV access to the library's Artist/Album/Track hierarchy, plus a virtual `playlists/` directory containing generated `.m3u` files built from the SQLite playlist tables. Audio files are streamed from Google Drive; playlist files are generated dynamically. `OPTIONS` is unauthenticated for capability discovery, other methods require auth, and `PROPFIND Depth: infinity` is rejected with 403. |
 | `/System/Info/Public` | GET | Server identification (name, version, Id) — used by the client to detect the server type. |
 | `/Users/{userId}` | GET | The logged-in (single) user's data. |
-| `/Users/{userId}/Views` or `/Items?includeItemTypes=Playlist` | GET | List of playlists as a `BaseItemDto` collection (type `Playlist`). |
-| `/Playlists/{id}/Items` | GET | Ordered list of a playlist's tracks, with fields required for playback (Id, Name, Artists, Album, RunTimeTicks, index). |
-| `/Items/{id}/Images/Primary` | GET | Serves the image from SQLite or proxies it from a public WebP object in GCS, depending on `IMAGE_HOSTING`. |
+| `/Users/{userId}/Views` or `/Items?includeItemTypes=Playlist` | GET | List of playlists as a `BaseItemDto` collection (type `Playlist`), with support for pagination (`StartIndex`/`Limit`) and fetching playlist tracks via `ParentId`. |
+| `/Playlists/{id}/Items` | GET | Ordered list of a playlist's tracks, with fields required for playback (Id, Name, Artists, Album, RunTimeTicks, 1-based `IndexNumber`), with support for pagination (`StartIndex`/`Limit`). |
+| `/Playlists/{id}` | GET | Metadata for the specified playlist. |
+| `/Items/{id}` or `/Users/{userId}/Items/{itemId}` | GET | Fetch a single item (playlist or track). |
+| `/Items/{id}/Images/Primary` | GET | Serves the image from SQLite or proxies it from a public WebP object in GCS (with on-the-fly conversion to JPEG/PNG when requested via `format=jpg`/`png`), depending on `IMAGE_HOSTING`. |
 | `/Audio/{id}/stream` (or `/Audio/{id}/universal`) | GET | Streams audio bytes — proxied from Google Drive (`files.get?alt=media`), with full `Range` header support (seek), passed through 1:1 to Drive and back to the client. |
 
 Authorization: all endpoints except `AuthenticateByName` and `System/Info/Public`

@@ -3,8 +3,9 @@
 API-only, read-only backend implementing a minimal Jellyfin-compatible API subset (see
 [`docs/SPEC.md`](../docs/SPEC.md) section 4). Serves playlist/track metadata and proxies audio
 bytes straight from Google Drive with `Range` support for seeking. Cover art can be served from
-SQLite (`IMAGE_HOSTING=sqlite`, the default) or as proxied WebP objects from public GCS
-(`IMAGE_HOSTING=gcs`).
+SQLite (`IMAGE_HOSTING=sqlite`, the default) or proxied from WebP objects in public GCS
+(`IMAGE_HOSTING=gcs`), with on-the-fly conversion to JPEG/PNG when requested via `format=jpg`
+or `format=png`. Automatically multiplexes HTTP/1.1 and HTTP/2 cleartext (h2c) on the same port.
 
 ## Local development
 

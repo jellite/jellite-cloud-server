@@ -5,13 +5,15 @@
   "description": "API-only, Jellyfin-compatible music server backed by Google Drive + SQLite, deployed on Cloud Run.",
   "workspaces": [
     "backend",
-    "sync"
+    "sync",
+    "upnp"
   ],
   "scripts": {
-    "build": "npm run build --workspace backend && npm run build --workspace sync",
+    "build": "npm run build --workspace backend && npm run build --workspace sync && npm run build --workspace upnp",
     "sync": "npm run start --workspace sync --",
     "dev:backend": "npm run dev --workspace backend",
-    "backend": "npm run build --workspace backend && node backend/dist/server.js"
+    "backend": "npm run build --workspace backend && node backend/dist/server.js",
+    "upnp": "npm run build --workspace upnp && node upnp/dist/index.js"
   },
   "license": "MIT"
 }

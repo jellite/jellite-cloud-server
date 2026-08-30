@@ -1,5 +1,6 @@
 import http from "node:http";
 import http2 from "node:http2";
+import net from "node:net";
 import cors from "cors";
 import express from "express";
 import { config } from "./config.js";
@@ -115,8 +116,8 @@ function startServer(): void {
       throw new Error("Unable to determine internal HTTP server port");
     }
 
-    const server = http2.createServer();
-    server.on("stream", (stream, headers) => {
+    const h2Server = http2.createServer();
+    h2Server.on("stream", (stream, headers) => {
       const method = headers[":method"];
       const path = headers[":path"];
       if (!method || !path) {
@@ -154,7 +155,20 @@ function startServer(): void {
       stream.pipe(upstreamRequest);
     });
 
-    server.listen(config.port, () => {
+    const multiplexer = net.createServer((socket) => {
+      socket.once("data", (chunk) => {
+        socket.pause();
+        socket.unshift(chunk);
+        if (chunk.length >= 3 && chunk.slice(0, 3).toString() === "PRI") {
+          h2Server.emit("connection", socket);
+        } else {
+          appServer.emit("connection", socket);
+        }
+        process.nextTick(() => socket.resume());
+      });
+    });
+
+    multiplexer.listen(config.port, () => {
       // eslint-disable-next-line no-console
       console.log(`Jellite backend listening on port ${config.port}`);
     });

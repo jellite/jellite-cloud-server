@@ -150,5 +150,5 @@ export function getPlaylistByExternalId(
   externalId: (id: string) => string,
   id: string
 ): PlaylistRow | undefined {
-  return getPlaylists().find((playlist) => externalId(playlist.id) === id);
+  return getPlaylists().find((playlist) => externalId(playlist.id) === id || playlist.id === id);
 }
