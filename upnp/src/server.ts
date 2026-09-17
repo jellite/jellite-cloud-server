@@ -61,6 +61,201 @@ export async function startUpnpServer(host: string, port: number, backendUrl: st
         res.type('application/xml').send(deviceXml);
     });
 
+    // 1b. UPnP service definition endpoints (SCPD)
+    app.get('/ContentDirectory.xml', (req, res) => {
+        const scpdXml = `<?xml version="1.0" encoding="utf-8"?>
+<scpd xmlns="urn:schemas-upnp-org:service-1-0">
+  <specVersion><major>1</major><minor>0</minor></specVersion>
+  <actionList>
+    <action>
+      <name>GetSearchCapabilities</name>
+      <argumentList>
+        <argument>
+          <name>SearchCaps</name>
+          <direction>out</direction>
+          <relatedStateVariable>SearchCapabilities</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action>
+      <name>GetSortCapabilities</name>
+      <argumentList>
+        <argument>
+          <name>SortCaps</name>
+          <direction>out</direction>
+          <relatedStateVariable>SortCapabilities</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action>
+      <name>GetSystemUpdateID</name>
+      <argumentList>
+        <argument>
+          <name>Id</name>
+          <direction>out</direction>
+          <relatedStateVariable>SystemUpdateID</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action>
+      <name>Browse</name>
+      <argumentList>
+        <argument>
+          <name>ObjectID</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_ObjectID</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>BrowseFlag</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_BrowseFlag</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>Filter</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_Filter</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>StartingIndex</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_Index</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>RequestedCount</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_Count</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>SortCriteria</name>
+          <direction>in</direction>
+          <relatedStateVariable>A_ARG_TYPE_SortCriteria</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>Result</name>
+          <direction>out</direction>
+          <relatedStateVariable>A_ARG_TYPE_Result</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>NumberReturned</name>
+          <direction>out</direction>
+          <relatedStateVariable>A_ARG_TYPE_Count</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>TotalMatches</name>
+          <direction>out</direction>
+          <relatedStateVariable>A_ARG_TYPE_Count</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>UpdateID</name>
+          <direction>out</direction>
+          <relatedStateVariable>A_ARG_TYPE_UpdateID</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+  </actionList>
+  <serviceStateTable>
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_Filter</name>
+      <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_SortCriteria</name>
+      <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_Index</name>
+      <dataType>ui4</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_Count</name>
+      <dataType>ui4</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_UpdateID</name>
+      <dataType>ui4</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>SearchCapabilities</name>
+      <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>SortCapabilities</name>
+      <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="yes">
+      <name>SystemUpdateID</name>
+      <dataType>ui4</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_Result</name>
+      <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_ObjectID</name>
+      <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="no">
+      <name>A_ARG_TYPE_BrowseFlag</name>
+      <dataType>string</dataType>
+      <allowedValueList>
+        <allowedValue>BrowseMetadata</allowedValue>
+        <allowedValue>BrowseDirectChildren</allowedValue>
+      </allowedValueList>
+    </stateVariable>
+  </serviceStateTable>
+</scpd>`;
+        res.type('application/xml').send(scpdXml);
+    });
+
+    app.get('/ConnectionManager.xml', (req, res) => {
+        const scpdXml = `<?xml version="1.0" encoding="utf-8"?>
+<scpd xmlns="urn:schemas-upnp-org:service-1-0">
+  <specVersion><major>1</major><minor>0</minor></specVersion>
+  <actionList>
+    <action>
+      <name>GetProtocolInfo</name>
+      <argumentList>
+        <argument>
+          <name>Source</name>
+          <direction>out</direction>
+          <relatedStateVariable>SourceProtocolInfo</relatedStateVariable>
+        </argument>
+        <argument>
+          <name>Sink</name>
+          <direction>out</direction>
+          <relatedStateVariable>SinkProtocolInfo</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+    <action>
+      <name>GetCurrentConnectionIDs</name>
+      <argumentList>
+        <argument>
+          <name>ConnectionIDs</name>
+          <direction>out</direction>
+          <relatedStateVariable>CurrentConnectionIDs</relatedStateVariable>
+        </argument>
+      </argumentList>
+    </action>
+  </actionList>
+  <serviceStateTable>
+    <stateVariable sendEvents="yes">
+      <name>SourceProtocolInfo</name>
+      <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="yes">
+      <name>SinkProtocolInfo</name>
+      <dataType>string</dataType>
+    </stateVariable>
+    <stateVariable sendEvents="yes">
+      <name>CurrentConnectionIDs</name>
+      <dataType>string</dataType>
+    </stateVariable>
+  </serviceStateTable>
+</scpd>`;
+        res.type('application/xml').send(scpdXml);
+    });
+
     // 2. SOAP control endpoints
     app.post('/ContentDirectory/control', async (req, res) => {
         await handleContentDirectoryControl(req, res, host, port, backendUrl, apiKey, userId);
@@ -91,6 +286,7 @@ export async function startUpnpServer(host: string, port: number, backendUrl: st
 
         const client = targetUrl.startsWith('https:') ? https : http;
         client.get(targetUrl, options, (proxyRes) => {
+            // Clean express defaults to send clean binary stream
             res.status(proxyRes.statusCode || 200);
 
             // Forward essential headers
@@ -124,11 +320,13 @@ export async function startUpnpServer(host: string, port: number, backendUrl: st
 
             res.status(200);
 
+            // Forwarding Content-Length is critical for hardware players (e.g. Yamaha)
             if (proxyRes.headers['content-length']) {
                 res.setHeader('Content-Length', proxyRes.headers['content-length']);
             }
 
             res.setHeader('Content-Type', 'image/jpeg');
+            // DLNA thumbnail profile for small JPEG covers
             res.setHeader('transferMode.dlna.org', 'Streaming');
             res.setHeader('contentFeatures.dlna.org', 'DLNA.ORG_PN=JPEG_TN;DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=00900000000000000000000000000000');
 
